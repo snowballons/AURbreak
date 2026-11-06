@@ -35,9 +35,43 @@ export global AppState {
     in-out property <[PackageItem]> packages: [];
     in-out property <bool> loading: false;
     in-out property <string> status-text: "Ready";
-    in-out property <int> active-tab: 0; // 0 = Last Updated, 1 = Newest Submissions
+    in-out property <int> active-tab: 0; // 0 = Last Updated, 1 = Newest Submissions, 2 = Search
     in-out property <string> last-fetched-str: "";
     in-out property <string> search-filter: "";
+
+    // Search tab state
+    in-out property <string> search-query: "";
+    in-out property <int> search-by: 1; // default to name-desc (index 1)
+    in-out property <int> search-page: 1;
+    in-out property <int> search-total-pages: 1;
+    in-out property <int> search-result-count: 0;
+    in-out property <bool> search-loading: false;
+    in-out property <[string]> suggestions: [];
+
+    // Detail view state (Phase 2)
+    in-out property <bool> show-detail: false;
+    in-out property <string> detail-name: "";
+    in-out property <string> detail-version: "";
+    in-out property <string> detail-description: "";
+    in-out property <string> detail-maintainer: "";
+    in-out property <int> detail-votes: 0;
+    in-out property <float> detail-popularity: 0.0;
+    in-out property <string> detail-url: "";
+    in-out property <string> detail-license: "";
+    in-out property <[string]> detail-depends: [];
+    in-out property <[string]> detail-make-depends: [];
+    in-out property <[string]> detail-opt-depends: [];
+    in-out property <[string]> detail-check-depends: [];
+    in-out property <[string]> detail-provides: [];
+    in-out property <[string]> detail-conflicts: [];
+    in-out property <[string]> detail-replaces: [];
+    in-out property <[string]> detail-groups: [];
+    in-out property <[string]> detail-keywords: [];
+    in-out property <[string]> detail-co-maintainers: [];
+    in-out property <string> detail-first-submitted: "";
+    in-out property <string> detail-last-modified: "";
+    in-out property <string> detail-out-of-date: "";
+    in-out property <string> detail-submitter: "";
 }
 
 // Global logic callbacks handled by Rust.
@@ -45,7 +79,18 @@ export global AppLogic {
     callback refresh-requested();
     callback open-pkg-page(string);
     callback tab-changed(int);
+
+    // Search callbacks
+    callback search-requested(string, int, int);
+    callback search-page-changed(int);
+    callback search-by-changed(int);
+    callback get-suggestions(string);
+
+    // Detail view callbacks (Phase 2)
+    callback show-package-detail(string);
+    callback close-detail();
 }
+
 
 component PackageCard inherits Rectangle {
     in property <PackageItem> pkg;
@@ -129,6 +174,161 @@ component PackageCard inherits Rectangle {
         }
     }
 }
+// Search bar component for the Search tab
+component SearchBar inherits Rectangle {
+    in-out property <string> query: "";
+    in-out property <int> by: 1;
+    in-out property <bool> loading: false;
+    in-out property <int> page: 1;
+    in-out property <int> total-pages: 1;
+    in-out property <int> result-count: 0;
+    in-out property <[string]> suggestions: [];
+
+    callback search-requested(string, int, int);
+    callback page-changed(int);
+    callback by-changed(int);
+    callback get-suggestions(string);
+
+    height: 80px;
+    // padding moved to VerticalLayout
+    background: Theme.card-bg;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.card-border;
+
+    VerticalLayout {
+        spacing: 8px;
+        padding: 12px;
+
+        // Row 1: Query input with autocomplete
+        HorizontalBox {
+            spacing: 8px;
+
+            LineEdit {
+                text <=> root.query;
+                placeholder-text: "Search packages (name, description, maintainer, depends…)";
+                horizontal-stretch: 1;
+                edited => {
+                    // Trigger suggestions on text change (Rust side handles min length)
+                    root.get-suggestions(root.query);
+                }
+            }
+
+            // Search by dropdown - simple click-to-cycle approach
+            Rectangle {
+                width: 140px;
+                height: 32px;
+                background: Theme.card-bg-hover;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Theme.card-border;
+                Text {
+                    text: root.by == 0 ? "Name" :
+                          root.by == 1 ? "Name (desc)" :
+                          root.by == 2 ? "Depends" :
+                          root.by == 3 ? "Check Depends" :
+                          root.by == 4 ? "Opt Depends" :
+                          root.by == 5 ? "Make Depends" :
+                          root.by == 6 ? "Maintainer" : "Submitter";
+                    font-size: 12px;
+                    color: Theme.text-primary;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    x: 8px;
+                }
+                TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        root.by = Math.mod(root.by + 1, 8);
+                    }
+                }
+            }
+
+            // Search button
+            Button {
+                text: root.loading ? "Searching…" : "Search";
+                enabled: !root.loading && root.query != "";
+                primary: true;
+                clicked => { root.search-requested(root.query, root.by, 1); }
+            }
+        }
+
+        // Row 2: Pagination & Result count
+        HorizontalBox {
+            spacing: 12px;
+            alignment: space-between;
+
+            Text {
+                text: root.result-count > 0 ? "{root.result-count} results" : "";
+                font-size: 11px;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+
+            HorizontalBox {
+                spacing: 4px;
+
+                Button {
+                    text: "← Prev";
+                    enabled: root.page > 1 && !root.loading;
+                    clicked => { root.page-changed(root.page - 1); }
+                }
+
+                Text {
+                    text: "Page {root.page} / {root.total-pages}";
+                    font-size: 11px;
+                    color: Theme.text-secondary;
+                    vertical-alignment: center;
+                    preferred-width: 100px;
+                    horizontal-alignment: center;
+                }
+
+                Button {
+                    text: "Next →";
+                    enabled: root.page < root.total-pages && !root.loading;
+                    clicked => { root.page-changed(root.page + 1); }
+                }
+            }
+        }
+
+        // Autocomplete dropdown (simple version)
+        if root.suggestions.length > 0 && root.query != "": Rectangle {
+            background: Theme.card-bg-hover;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.card-border;
+            max-height: 200px;
+            clip: true;
+
+            ScrollView {
+                VerticalLayout {
+                    for suggestion in root.suggestions: TouchArea {
+                        width: 100%;
+                        height: 32px;
+                        clicked => {
+                            root.query = suggestion;
+                            root.search-requested(suggestion, root.by, 1);
+                        }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            Text {
+                                text: suggestion;
+                                font-size: 12px;
+                                color: Theme.text-primary;
+                                vertical-alignment: center;
+                                horizontal-alignment: left;
+                                x: 12px;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 export component AppWindow inherits Window {
     title: "Browse Arch — Latest Modified AUR Packages";
@@ -179,15 +379,34 @@ export component AppWindow inherits Window {
                 }
 
                 Button {
+                    text: AppState.active-tab == 2 ? "● Search" : "Search";
+                    primary: AppState.active-tab == 2;
+                    clicked => { AppLogic.tab-changed(2); }
+                }
+
+                Button {
                     text: AppState.loading ? "Loading…" : "↻ Refresh";
                     enabled: !AppState.loading;
                     clicked => { AppLogic.refresh-requested(); }
                 }
             }
         }
+        // Search UI - different for Search tab vs other tabs
+        if AppState.active-tab == 2: SearchBar {
+            query <=> AppState.search-query;
+            by <=> AppState.search-by;
+            loading <=> AppState.search-loading;
+            page <=> AppState.search-page;
+            total-pages <=> AppState.search-total-pages;
+            result-count <=> AppState.search-result-count;
+            suggestions <=> AppState.suggestions;
 
-        // Search filter bar
-        HorizontalBox {
+            search-requested(query, by, page) => { AppLogic.search-requested(query, by, page); }
+            page-changed(page) => { AppLogic.search-page-changed(page); }
+            by-changed(by) => { AppLogic.search-by-changed(by); }
+            get-suggestions(prefix) => { AppLogic.get-suggestions(prefix); }
+        }
+        if AppState.active-tab != 2: HorizontalBox {
             spacing: 8px;
 
             LineEdit {

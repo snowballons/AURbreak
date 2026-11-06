@@ -3,7 +3,7 @@ slint::include_modules!();
 mod client;
 mod storage;
 
-use client::{AurPackage, RssPackage};
+use client::{AurPackage, RssPackage, SearchBy, SearchResult};
 use slint::{VecModel};
 use std::sync::mpsc;
 use std::thread;
@@ -11,6 +11,8 @@ use std::thread;
 enum BackgroundMsg {
     LastUpdatedFetched(Result<Vec<AurPackage>, String>),
     RssFetched(Result<Vec<RssPackage>, String>),
+    SearchFetched(Result<SearchResult, String>),
+    SuggestFetched(Result<Vec<String>, String>),
 }
 
 fn main() {
@@ -42,8 +44,22 @@ fn main() {
             let tab = app.global::<AppState>().get_active_tab();
             if tab == 0 {
                 trigger_last_updated_fetch(&app, &tx_refresh);
-            } else {
+            } else if tab == 1 {
                 trigger_rss_fetch(&app, &tx_refresh);
+            } else if tab == 2 {
+                // Re-run current search
+                let state = app.global::<AppState>();
+                let query = state.get_search_query().to_string();
+                if !query.is_empty() {
+                    let search_by_idx = state.get_search_by() as usize;
+                    let by = SearchBy::all().get(search_by_idx).copied().unwrap_or(SearchBy::NameDesc);
+                    state.set_search_loading(true);
+                    let tx = tx_refresh.clone();
+                    thread::spawn(move || {
+                        let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                        let _ = tx.send(BackgroundMsg::SearchFetched(res));
+                    });
+                }
             }
         }
     });
@@ -56,8 +72,12 @@ fn main() {
             state.set_active_tab(new_tab);
             if new_tab == 0 {
                 trigger_last_updated_fetch(&app, &tx_tab);
-            } else {
+            } else if new_tab == 1 {
                 trigger_rss_fetch(&app, &tx_tab);
+            } else if new_tab == 2 {
+                // Search tab - don't auto-fetch, wait for user query
+                state.set_packages(slint::ModelRc::new(VecModel::default()));
+                state.set_status_text("Enter a search query above".into());
             }
         }
     });
@@ -65,6 +85,62 @@ fn main() {
     ui.global::<AppLogic>().on_open_pkg_page(move |pkg_name| {
         let url = format!("https://aur.archlinux.org/packages/{pkg_name}");
         let _ = open::that(&url);
+    });
+
+    // Search callback with debouncing (handled in UI, but we also handle here)
+    let ui_weak = ui.as_weak();
+    let tx_search = tx.clone();
+    ui.global::<AppLogic>().on_search_requested(move |query, by, _page| {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            state.set_search_loading(true);
+            state.set_status_text(format!("Searching for \"{}\"…", query).into());
+
+            let tx = tx_search.clone();
+            let query = query.to_string();
+            let by = SearchBy::all().get(by as usize).copied().unwrap_or(SearchBy::NameDesc);
+            thread::spawn(move || {
+                let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                let _ = tx.send(BackgroundMsg::SearchFetched(res));
+            });
+        }
+    });
+
+    // Suggest callback for autocomplete
+    let ui_weak = ui.as_weak();
+    let tx_suggest = tx.clone();
+    ui.global::<AppLogic>().on_get_suggestions(move |prefix| {
+        if let Some(_app) = ui_weak.upgrade() {
+            let prefix = prefix.to_string();
+            if prefix.len() < 2 {
+                return;
+            }
+            let tx = tx_suggest.clone();
+            thread::spawn(move || {
+                let res = client::suggest_packages(&prefix).map_err(|e| e.to_string());
+                let _ = tx.send(BackgroundMsg::SuggestFetched(res));
+            });
+        }
+    });
+
+    // Search page change callback
+    let ui_weak = ui.as_weak();
+    let tx_page = tx.clone();
+    ui.global::<AppLogic>().on_search_page_changed(move |_page| {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            let query = state.get_search_query().to_string();
+            if query.is_empty() {
+                return;
+            }
+            let by = SearchBy::all().get(state.get_search_by() as usize).copied().unwrap_or(SearchBy::NameDesc);
+            state.set_search_loading(true);
+            let tx = tx_page.clone();
+            thread::spawn(move || {
+                let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                let _ = tx.send(BackgroundMsg::SearchFetched(res));
+            });
+        }
     });
 
     // Event loop poll for background thread messages.
@@ -125,6 +201,57 @@ fn main() {
                                 }
                                 Err(err) => {
                                     state.set_status_text(format!("RSS fetch failed: {}", err).into());
+                                }
+                            }
+                        }
+                        BackgroundMsg::SearchFetched(res) => {
+                            state.set_loading(false);
+                            state.set_search_loading(false);
+                            state.set_status_text("".into());
+
+                            match res {
+                                Ok(search_result) => {
+                                    // Convert PackageBasic to AurPackage for display
+                                    let aur_pkgs: Vec<AurPackage> = search_result
+                                        .results
+                                        .into_iter()
+                                        .map(|p| AurPackage {
+                                            name: p.name,
+                                            version: p.version,
+                                            votes: p.num_votes,
+                                            popularity: p.popularity,
+                                            description: p.description.unwrap_or_default(),
+                                            maintainer: p.maintainer.unwrap_or_default(),
+                                            updated_str: {
+                                                let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(p.last_modified, 0);
+                                                dt.map(|d| d.format("%Y-%m-%d %H:%M (UTC)").to_string())
+                                                    .unwrap_or_default()
+                                            },
+                                            updated_utc: chrono::DateTime::<chrono::Utc>::from_timestamp(p.last_modified, 0),
+                                        })
+                                        .collect();
+
+                                    state.set_packages(slint::ModelRc::new(packages_to_model(&aur_pkgs)));
+                                    state.set_search_result_count(search_result.resultcount);
+                                    state.set_search_total_pages(((search_result.resultcount as f64) / 50.0).ceil() as i32);
+                                    state.set_last_fetched_str("just now".into());
+                                    state.set_status_text(
+                                        format!("Found {} packages.", search_result.resultcount).into(),
+                                    );
+                                }
+                                Err(err) => {
+                                    state.set_status_text(format!("Search failed: {}", err).into());
+                                }
+                            }
+                        }
+                        BackgroundMsg::SuggestFetched(res) => {
+                            match res {
+                                Ok(suggestions) => {
+                                    let shared: Vec<slint::SharedString> = suggestions.into_iter().map(|s| s.into()).collect();
+                                    state.set_suggestions(slint::ModelRc::new(slint::VecModel::from(shared)));
+                                }
+                                Err(_err) => {
+                                    // Silently ignore suggest errors
                                 }
                             }
                         }
