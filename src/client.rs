@@ -32,17 +32,17 @@ pub struct PackageBasic {
     pub package_base: String,
     #[serde(rename = "Maintainer")]
     pub maintainer: Option<String>,
-    #[serde(rename = "NumVotes")]
+    #[serde(rename = "NumVotes", default)]
     pub num_votes: i32,
-    #[serde(rename = "Popularity")]
+    #[serde(rename = "Popularity", default)]
     pub popularity: f64,
-    #[serde(rename = "FirstSubmitted")]
+    #[serde(rename = "FirstSubmitted", default)]
     pub first_submitted: i64,
-    #[serde(rename = "LastModified")]
+    #[serde(rename = "LastModified", default)]
     pub last_modified: i64,
     #[serde(rename = "OutOfDate")]
     pub out_of_date: Option<String>,
-    #[serde(rename = "Version")]
+    #[serde(rename = "Version", default)]
     pub version: String,
     #[serde(rename = "URLPath")]
     pub url_path: Option<String>,
@@ -55,29 +55,29 @@ pub struct PackageBasic {
 pub struct PackageDetailed {
     #[serde(flatten)]
     pub basic: PackageBasic,
-    #[serde(rename = "Submitter")]
+    #[serde(rename = "Submitter", default)]
     pub submitter: String,
-    #[serde(rename = "License")]
+    #[serde(rename = "License", default)]
     pub license: Vec<String>,
-    #[serde(rename = "Depends")]
+    #[serde(rename = "Depends", default)]
     pub depends: Vec<String>,
-    #[serde(rename = "MakeDepends")]
+    #[serde(rename = "MakeDepends", default)]
     pub make_depends: Vec<String>,
-    #[serde(rename = "OptDepends")]
+    #[serde(rename = "OptDepends", default)]
     pub opt_depends: Vec<String>,
-    #[serde(rename = "CheckDepends")]
+    #[serde(rename = "CheckDepends", default)]
     pub check_depends: Vec<String>,
-    #[serde(rename = "Provides")]
+    #[serde(rename = "Provides", default)]
     pub provides: Vec<String>,
-    #[serde(rename = "Conflicts")]
+    #[serde(rename = "Conflicts", default)]
     pub conflicts: Vec<String>,
-    #[serde(rename = "Replaces")]
+    #[serde(rename = "Replaces", default)]
     pub replaces: Vec<String>,
-    #[serde(rename = "Groups")]
+    #[serde(rename = "Groups", default)]
     pub groups: Vec<String>,
-    #[serde(rename = "Keywords")]
+    #[serde(rename = "Keywords", default)]
     pub keywords: Vec<String>,
-    #[serde(rename = "CoMaintainers")]
+    #[serde(rename = "CoMaintainers", default)]
     pub co_maintainers: Vec<String>,
 }
 
@@ -657,6 +657,35 @@ mod tests {
         assert_eq!(pkg.opt_depends, vec!["opt1: for something"]);
         assert_eq!(pkg.check_depends, vec!["check1"]);
         assert_eq!(pkg.provides, vec!["provides1"]);
+    }
+
+    #[test]
+    fn test_info_result_deserialization_minimal() {
+        let json = r#"
+        {
+            "resultcount": 1,
+            "type": "multiinfo",
+            "version": 5,
+            "results": [
+                {
+                    "ID": 1,
+                    "Name": "minimal-pkg",
+                    "PackageBaseID": 1,
+                    "PackageBase": "minimal-pkg",
+                    "Version": "1.0-1",
+                    "FirstSubmitted": 1000,
+                    "LastModified": 2000
+                }
+            ],
+            "error": null
+        }
+        "#;
+        let result: InfoResult = serde_json::from_str(json).expect("deserialize failed");
+        assert_eq!(result.resultcount, 1);
+        let pkg = &result.results[0];
+        assert_eq!(pkg.basic.name, "minimal-pkg");
+        assert!(pkg.license.is_empty());
+        assert!(pkg.depends.is_empty());
     }
 
     #[test]
