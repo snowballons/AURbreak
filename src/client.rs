@@ -81,6 +81,62 @@ pub struct PackageDetailed {
     pub co_maintainers: Vec<String>,
 }
 
+/// UI-friendly package detail (subset of PackageDetailed for display)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DetailPackage {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub maintainer: String,
+    pub votes: i32,
+    pub popularity: f64,
+    pub url: String,
+    pub license: Vec<String>,
+    pub depends: Vec<String>,
+    pub make_depends: Vec<String>,
+    pub opt_depends: Vec<String>,
+    pub check_depends: Vec<String>,
+    pub provides: Vec<String>,
+    pub conflicts: Vec<String>,
+    pub replaces: Vec<String>,
+    pub groups: Vec<String>,
+    pub keywords: Vec<String>,
+    pub co_maintainers: Vec<String>,
+    pub submitter: String,
+    pub first_submitted: i64,
+    pub last_modified: i64,
+    pub out_of_date: Option<String>,
+}
+
+impl DetailPackage {
+    pub fn from_detailed(d: PackageDetailed) -> Self {
+        Self {
+            name: d.basic.name,
+            version: d.basic.version,
+            description: d.basic.description.unwrap_or_default(),
+            maintainer: d.basic.maintainer.unwrap_or_default(),
+            votes: d.basic.num_votes,
+            popularity: d.basic.popularity,
+            url: d.basic.url.unwrap_or_default(),
+            license: d.license,
+            depends: d.depends,
+            make_depends: d.make_depends,
+            opt_depends: d.opt_depends,
+            check_depends: d.check_depends,
+            provides: d.provides,
+            conflicts: d.conflicts,
+            replaces: d.replaces,
+            groups: d.groups,
+            keywords: d.keywords,
+            co_maintainers: d.co_maintainers,
+            submitter: d.submitter,
+            first_submitted: d.basic.first_submitted,
+            last_modified: d.basic.last_modified,
+            out_of_date: d.basic.out_of_date,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SearchResult {
     pub resultcount: i32,

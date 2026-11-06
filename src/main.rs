@@ -3,7 +3,7 @@ slint::include_modules!();
 mod client;
 mod storage;
 
-use client::{AurPackage, RssPackage, SearchBy, SearchResult};
+use client::{AurPackage, DetailPackage, RssPackage, SearchBy, SearchResult};
 use slint::{VecModel};
 use std::sync::mpsc;
 use std::thread;
@@ -13,6 +13,7 @@ enum BackgroundMsg {
     RssFetched(Result<Vec<RssPackage>, String>),
     SearchFetched(Result<SearchResult, String>),
     SuggestFetched(Result<Vec<String>, String>),
+    DetailFetched(Result<DetailPackage, String>),
 }
 
 fn main() {
@@ -143,6 +144,29 @@ fn main() {
         }
     });
 
+    // Show package detail callback
+    let ui_weak = ui.as_weak();
+    let tx_detail = tx.clone();
+    ui.global::<AppLogic>().on_show_package_detail(move |name| {
+        if let Some(_app) = ui_weak.upgrade() {
+            let name = name.to_string();
+            let tx = tx_detail.clone();
+            thread::spawn(move || {
+                let res = client::get_package_info(&name).map_err(|e| e.to_string()).map(DetailPackage::from_detailed);
+                let _ = tx.send(BackgroundMsg::DetailFetched(res));
+            });
+        }
+    });
+
+    // Close detail callback
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_close_detail(move || {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            state.set_show_detail(false);
+        }
+    });
+
     // Event loop poll for background thread messages.
     let ui_weak = ui.as_weak();
     let timer = slint::Timer::default();
@@ -252,6 +276,75 @@ fn main() {
                                 }
                                 Err(_err) => {
                                     // Silently ignore suggest errors
+                                }
+                            }
+                        }
+                        BackgroundMsg::DetailFetched(res) => {
+                            state.set_loading(false);
+                            state.set_status_text("".into());
+
+                            match res {
+                                Ok(detail) => {
+                                    state.set_show_detail(true);
+                                    state.set_detail_name(detail.name.into());
+                                    state.set_detail_version(detail.version.into());
+                                    state.set_detail_description(detail.description.into());
+                                    state.set_detail_maintainer(detail.maintainer.into());
+                                    state.set_detail_votes(detail.votes);
+                                    state.set_detail_popularity(detail.popularity as f32);
+                                    state.set_detail_url(detail.url.into());
+                                    state.set_detail_license(detail.license.join(", ").into());
+
+                                    let depends: Vec<slint::SharedString> = detail.depends.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_depends(slint::ModelRc::new(slint::VecModel::from(depends)));
+
+                                    let make_depends: Vec<slint::SharedString> = detail.make_depends.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_make_depends(slint::ModelRc::new(slint::VecModel::from(make_depends)));
+
+                                    let opt_depends: Vec<slint::SharedString> = detail.opt_depends.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_opt_depends(slint::ModelRc::new(slint::VecModel::from(opt_depends)));
+
+                                    let check_depends: Vec<slint::SharedString> = detail.check_depends.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_check_depends(slint::ModelRc::new(slint::VecModel::from(check_depends)));
+
+                                    let provides: Vec<slint::SharedString> = detail.provides.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_provides(slint::ModelRc::new(slint::VecModel::from(provides)));
+
+                                    let conflicts: Vec<slint::SharedString> = detail.conflicts.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_conflicts(slint::ModelRc::new(slint::VecModel::from(conflicts)));
+
+                                    let replaces: Vec<slint::SharedString> = detail.replaces.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_replaces(slint::ModelRc::new(slint::VecModel::from(replaces)));
+
+                                    let groups: Vec<slint::SharedString> = detail.groups.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_groups(slint::ModelRc::new(slint::VecModel::from(groups)));
+
+                                    let keywords: Vec<slint::SharedString> = detail.keywords.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_keywords(slint::ModelRc::new(slint::VecModel::from(keywords)));
+
+                                    let co_maintainers: Vec<slint::SharedString> = detail.co_maintainers.into_iter().map(|s| s.into()).collect();
+                                    state.set_detail_co_maintainers(slint::ModelRc::new(slint::VecModel::from(co_maintainers)));
+                                    state.set_detail_submitter(detail.submitter.into());
+                                    state.set_detail_first_submitted(
+                                        chrono::DateTime::<chrono::Utc>::from_timestamp(detail.first_submitted, 0)
+                                            .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                                            .unwrap_or_default().into()
+                                    );
+                                    state.set_detail_last_modified(
+                                        chrono::DateTime::<chrono::Utc>::from_timestamp(detail.last_modified, 0)
+                                            .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                                            .unwrap_or_default().into()
+                                    );
+                                    state.set_detail_out_of_date(
+                                        detail.out_of_date
+                                            .and_then(|ts| ts.parse::<i64>().ok())
+                                            .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
+                                            .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                                            .unwrap_or_default().into()
+                                    );
+                                }
+                                Err(err) => {
+                                    state.set_status_text(format!("Detail fetch failed: {}", err).into());
                                 }
                             }
                         }

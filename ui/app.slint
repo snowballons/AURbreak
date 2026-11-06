@@ -28,6 +28,7 @@ export global Theme {
 
     out property <color> vote-color: #16a34a;
     out property <color> pop-color: #d97706;
+    out property <color> warning: #f59e0b;
 }
 
 // Global state pushed from Rust (interop.md pattern).
@@ -104,7 +105,7 @@ component PackageCard inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        clicked => { AppLogic.open-pkg-page(root.pkg.name); }
+        clicked => { AppLogic.show-package-detail(root.pkg.name); }
     }
 
     VerticalLayout {
@@ -329,6 +330,702 @@ component SearchBar inherits Rectangle {
         }
     }
 }
+// Package Detail Pane (right side)
+component PackageDetail inherits Rectangle {
+    in property <bool> show: false;
+    in property <string> name: "";
+    in property <string> version: "";
+    in property <string> description: "";
+    in property <string> maintainer: "";
+    in property <int> votes: 0;
+    in property <float> popularity: 0.0;
+    in property <string> url: "";
+    in property <string> license: "";
+    in property <[string]> depends: [];
+    in property <[string]> make-depends: [];
+    in property <[string]> opt-depends: [];
+    in property <[string]> check-depends: [];
+    in property <[string]> provides: [];
+    in property <[string]> conflicts: [];
+    in property <[string]> replaces: [];
+    in property <[string]> groups: [];
+    in property <[string]> keywords: [];
+    in property <[string]> co-maintainers: [];
+    in property <string> first-submitted: "";
+    in property <string> last-modified: "";
+    in property <string> out-of-date: "";
+    in property <string> submitter: "";
+
+    // Collapsible section states
+    in-out property <bool> show-license: true;
+    in-out property <bool> show-depends: true;
+    in-out property <bool> show-make-depends: true;
+    in-out property <bool> show-opt-depends: true;
+    in-out property <bool> show-check-depends: true;
+    in-out property <bool> show-provides: true;
+    in-out property <bool> show-conflicts: true;
+    in-out property <bool> show-replaces: true;
+    in-out property <bool> show-groups: true;
+    in-out property <bool> show-keywords: true;
+    in-out property <bool> show-co-maintainers: true;
+
+    width: root.show ? 400px : 0px;
+    background: Theme.card-bg;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.card-border;
+    animate width { duration: 200ms; }
+    clip: true;
+
+    // Header with close button
+    HorizontalBox {
+        height: 48px;
+        padding: 12px;
+        alignment: space-between;
+
+        VerticalLayout {
+            spacing: 2px;
+            Text {
+                text: root.name;
+                font-size: 16px;
+                font-weight: 700;
+                color: Theme.text-accent;
+            }
+            Text {
+                text: "v" + root.version;
+                font-size: 12px;
+                color: Theme.text-secondary;
+            }
+        }
+
+        TouchArea {
+            width: 32px;
+            height: 32px;
+            clicked => { AppLogic.close-detail(); }
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: Theme.card-bg-hover;
+                border-radius: 4px;
+                Text {
+                    text: "✕";
+                    font-size: 16px;
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // Divider
+    Rectangle {
+        height: 1px;
+        background: Theme.card-border;
+    }
+
+    ScrollView {
+        VerticalLayout {
+            padding: 12px;
+            spacing: 16px;
+
+            // Description
+            Text {
+                text: root.description != "" ? root.description : "(no description provided)";
+                font-size: 13px;
+                color: Theme.text-secondary;
+                wrap: word-wrap;
+            }
+
+            // Maintainer & Submitter
+            if root.maintainer != "" || root.submitter != "": HorizontalBox {
+                spacing: 12px;
+                if root.maintainer != "": Text {
+                    text: "Maintainer: " + root.maintainer;
+                    font-size: 12px;
+                    color: Theme.text-secondary;
+                }
+                if root.submitter != "": Text {
+                    text: "Submitter: " + root.submitter;
+                    font-size: 12px;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            // Stats
+            HorizontalBox {
+                spacing: 16px;
+                if root.votes > 0: Text {
+                    text: "▲ " + root.votes + " votes";
+                    font-size: 12px;
+                    color: Theme.vote-color;
+                }
+                if root.popularity > 0.0: Text {
+                    text: "★ pop " + root.popularity;
+                    font-size: 12px;
+                    color: Theme.pop-color;
+                }
+                if root.url != "": TouchArea {
+                    Text {
+                        text: "Open in Browser";
+                        font-size: 12px;
+                        color: Theme.text-accent;
+                        font-weight: 600;
+                    }
+                    clicked => { AppLogic.open-pkg-page(root.name); }
+                }
+            }
+
+            // License
+            if root.license != "": Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-license = !root.show-license; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "License";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-license ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-license: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            Text {
+                                text: root.license;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Depends
+            if root.depends.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-depends = !root.show-depends; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Depends";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-depends ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-depends: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for dep in root.depends: Text {
+                                text: "• " + dep;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+            // Make Depends
+            if root.make-depends.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-make-depends = !root.show-make-depends; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Make Depends";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-make-depends ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-make-depends: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.make-depends: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Opt Depends
+            if root.opt-depends.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-opt-depends = !root.show-opt-depends; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Opt Depends";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-opt-depends ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-opt-depends: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.opt-depends: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check Depends
+            if root.check-depends.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-check-depends = !root.show-check-depends; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Check Depends";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-check-depends ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-check-depends: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.check-depends: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Provides
+            if root.provides.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-provides = !root.show-provides; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Provides";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-provides ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-provides: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.provides: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Conflicts
+            if root.conflicts.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-conflicts = !root.show-conflicts; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Conflicts";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-conflicts ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-conflicts: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.conflicts: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Replaces
+            if root.replaces.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-replaces = !root.show-replaces; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Replaces";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-replaces ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-replaces: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.replaces: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Groups
+            if root.groups.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-groups = !root.show-groups; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Groups";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-groups ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-groups: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.groups: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Keywords
+            if root.keywords.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-keywords = !root.show-keywords; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Keywords";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-keywords ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-keywords: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.keywords: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Co-Maintainers
+            if root.co-maintainers.length > 0: Rectangle {
+                width: 100%;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    TouchArea {
+                        height: 32px;
+                        width: 100%;
+                        clicked => { root.show-co-maintainers = !root.show-co-maintainers; }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.card-bg-hover;
+                            border-radius: 4px;
+                            HorizontalBox {
+                                spacing: 8px;
+                                padding: 8px;
+                                Text {
+                                    text: "Co-Maintainers";
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: root.show-co-maintainers ? "▼" : "▶";
+                                    font-size: 12px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-co-maintainers: Rectangle {
+                        width: 100%;
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-left: 16px;
+                            for item in root.co-maintainers: Text {
+                                text: "• " + item;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Metadata
+            HorizontalBox {
+                spacing: 16px;
+                if root.first-submitted != "": Text {
+                    text: "First Submitted: " + root.first-submitted;
+                    font-size: 11px;
+                    color: Theme.text-secondary;
+                }
+                if root.last-modified != "": Text {
+                    text: "Last Modified: " + root.last-modified;
+                    font-size: 11px;
+                    color: Theme.text-secondary;
+                }
+                if root.out-of-date != "": Text {
+                    text: "Out of Date: " + root.out-of-date;
+                    font-size: 11px;
+                    color: Theme.warning;
+                }
+            }
+        }
+    }
+}
 
 export component AppWindow inherits Window {
     title: "Browse Arch — Latest Modified AUR Packages";
@@ -429,36 +1126,71 @@ export component AppWindow inherits Window {
             height: 4px;
         }
 
-        // Main scrollable list
-        ScrollView {
+        // Main content area (list + detail pane)
+        HorizontalBox {
             vertical-stretch: 1;
-            horizontal-scrollbar-policy: always-off;
+            spacing: 16px;
 
-            VerticalLayout {
-                padding-right: 12px;
-                padding-bottom: 8px;
-                spacing: 8px;
+            // Package List
+            ScrollView {
+                horizontal-stretch: 1;
+                horizontal-scrollbar-policy: always-off;
 
-                for pkg in AppState.packages: Rectangle {
-                    visible: AppState.search-filter == ""
-                        || pkg.name == AppState.search-filter
-                        || pkg.description == AppState.search-filter;
+                VerticalLayout {
+                    padding-right: 12px;
+                    padding-bottom: 8px;
+                    spacing: 8px;
 
-                    height: self.visible ? 105px : 0px;
+                    for pkg in AppState.packages: Rectangle {
+                        visible: AppState.search-filter == ""
+                            || pkg.name == AppState.search-filter
+                            || pkg.description == AppState.search-filter;
 
-                    PackageCard {
-                        pkg: pkg;
-                        width: 100%;
-                        height: 100%;
+                        height: self.visible ? 105px : 0px;
+
+                        PackageCard {
+                            pkg: pkg;
+                            width: 100%;
+                            height: 100%;
+                        }
+                    }
+
+                    if AppState.packages.length == 0 && !AppState.loading: Text {
+                        text: AppState.active-tab == 2
+                            ? "No search results. Try a different query."
+                            : "No packages to show. Click Refresh to fetch latest modified packages.";
+                        font-size: 14px;
+                        color: Theme.text-secondary;
+                        horizontal-alignment: center;
                     }
                 }
+            }
 
-                if AppState.packages.length == 0 && !AppState.loading: Text {
-                    text: "No packages to show. Click Refresh to fetch latest modified packages.";
-                    font-size: 14px;
-                    color: Theme.text-secondary;
-                    horizontal-alignment: center;
-                }
+            // Detail Pane
+            PackageDetail {
+                show: AppState.show-detail;
+                name: AppState.detail-name;
+                version: AppState.detail-version;
+                description: AppState.detail-description;
+                maintainer: AppState.detail-maintainer;
+                votes: AppState.detail-votes;
+                popularity: AppState.detail-popularity;
+                url: AppState.detail-url;
+                license: AppState.detail-license;
+                depends: AppState.detail-depends;
+                make-depends: AppState.detail-make-depends;
+                opt-depends: AppState.detail-opt-depends;
+                check-depends: AppState.detail-check-depends;
+                provides: AppState.detail-provides;
+                conflicts: AppState.detail-conflicts;
+                replaces: AppState.detail-replaces;
+                groups: AppState.detail-groups;
+                keywords: AppState.detail-keywords;
+                co-maintainers: AppState.detail-co-maintainers;
+                first-submitted: AppState.detail-first-submitted;
+                last-modified: AppState.detail-last-modified;
+                out-of-date: AppState.detail-out-of-date;
+                submitter: AppState.detail-submitter;
             }
         }
 
