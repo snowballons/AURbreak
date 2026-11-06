@@ -261,7 +261,7 @@ component SearchBar inherits Rectangle {
             alignment: space-between;
 
             Text {
-                text: root.result-count > 0 ? "{root.result-count} results" : "";
+                text: root.result-count > 0 ? (root.result-count + " results") : "";
                 font-size: 11px;
                 color: Theme.text-secondary;
                 vertical-alignment: center;
@@ -277,7 +277,7 @@ component SearchBar inherits Rectangle {
                 }
 
                 Text {
-                    text: "Page {root.page} / {root.total-pages}";
+                    text: "Page " + root.page + " / " + root.total-pages;
                     font-size: 11px;
                     color: Theme.text-secondary;
                     vertical-alignment: center;
@@ -1103,8 +1103,10 @@ export component AppWindow inherits Window {
             by-changed(by) => { AppLogic.search-by-changed(by); }
             get-suggestions(prefix) => { AppLogic.get-suggestions(prefix); }
         }
+        // Filter bar (for non-search tabs)
         if AppState.active-tab != 2: HorizontalBox {
             spacing: 8px;
+            height: 40px;
 
             LineEdit {
                 text <=> AppState.search-filter;
@@ -1146,7 +1148,7 @@ export component AppWindow inherits Window {
                             || pkg.name == AppState.search-filter
                             || pkg.description == AppState.search-filter;
 
-                        height: self.visible ? 105px : 0px;
+                        height: self.visible ? 120px : 0px;
 
                         PackageCard {
                             pkg: pkg;
@@ -1162,6 +1164,7 @@ export component AppWindow inherits Window {
                         font-size: 14px;
                         color: Theme.text-secondary;
                         horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
             }
