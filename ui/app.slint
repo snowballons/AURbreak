@@ -1,0 +1,257 @@
+import { Button, LineEdit, ScrollView, VerticalBox, HorizontalBox, ProgressIndicator, Palette } from "std-widgets.slint";
+
+export struct PackageItem {
+    name: string,
+    version: string,
+    votes: int,
+    popularity: string,
+    description: string,
+    maintainer: string,
+    updated: string,
+}
+
+// Global Theme: derives semantic colors from `Palette` so dark/light mode
+// transitions happen automatically based on OS theme (icons-and-theming rule).
+export global Theme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    // Palette tokens
+    out property <color> window-bg: dark ? #0f172a : #f8fafc;
+    out property <color> card-bg: dark ? #1e293b : #ffffff;
+    out property <color> card-bg-hover: dark ? #334155 : #f1f5f9;
+    out property <color> card-border: dark ? #334155 : #e2e8f0;
+
+    out property <color> text-primary: dark ? #f8fafc : #0f172a;
+    out property <color> text-secondary: dark ? #94a3b8 : #64748b;
+    out property <color> text-accent: dark ? #38bdf8 : #0284c7;
+    out property <color> text-date: dark ? #c084fc : #7e22ce;
+
+    out property <color> vote-color: #16a34a;
+    out property <color> pop-color: #d97706;
+}
+
+// Global state pushed from Rust (interop.md pattern).
+export global AppState {
+    in-out property <[PackageItem]> packages: [];
+    in-out property <bool> loading: false;
+    in-out property <string> status-text: "Ready";
+    in-out property <int> active-tab: 0; // 0 = Last Updated, 1 = Newest Submissions
+    in-out property <string> last-fetched-str: "";
+    in-out property <string> search-filter: "";
+}
+
+// Global logic callbacks handled by Rust.
+export global AppLogic {
+    callback refresh-requested();
+    callback open-pkg-page(string);
+    callback tab-changed(int);
+}
+
+component PackageCard inherits Rectangle {
+    in property <PackageItem> pkg;
+
+    background: touch.has-hover ? Theme.card-bg-hover : Theme.card-bg;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.card-border;
+
+    animate background { duration: 150ms; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { AppLogic.open-pkg-page(root.pkg.name); }
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        // Row 1: Name, Version, Maintainer, Updated
+        HorizontalBox {
+            spacing: 8px;
+
+            Text {
+                text: root.pkg.name;
+                font-size: 15px;
+                font-weight: 700;
+                color: Theme.text-accent;
+            }
+
+            Text {
+                text: root.pkg.version;
+                font-size: 12px;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            if root.pkg.maintainer != "": Text {
+                text: "by " + root.pkg.maintainer;
+                font-size: 11px;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: root.pkg.updated;
+                font-size: 11px;
+                font-weight: 600;
+                color: Theme.text-date;
+                vertical-alignment: center;
+            }
+        }
+
+        // Row 2: Description
+        Text {
+            text: root.pkg.description != "" ? root.pkg.description : "(no description provided)";
+            font-size: 12px;
+            color: Theme.text-secondary;
+            wrap: word-wrap;
+            max-height: 36px;
+        }
+
+        // Row 3: Stats (Votes, Popularity)
+        HorizontalBox {
+            spacing: 12px;
+
+            if root.pkg.votes > 0: Text {
+                text: "▲ " + root.pkg.votes + " votes";
+                font-size: 11px;
+                color: Theme.vote-color;
+            }
+
+            if root.pkg.popularity != "": Text {
+                text: "★ pop " + root.pkg.popularity;
+                font-size: 11px;
+                color: Theme.pop-color;
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Browse Arch — Latest Modified AUR Packages";
+    preferred-width: 960px;
+    preferred-height: 640px;
+    min-width: 700px;
+    min-height: 480px;
+    background: Theme.window-bg;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 16px;
+
+        // Header bar
+        HorizontalBox {
+            spacing: 16px;
+            alignment: space-between;
+
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "AUR Package Browser";
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: Theme.text-primary;
+                }
+                Text {
+                    text: AppState.last-fetched-str != "" ? "Last updated: " + AppState.last-fetched-str : "Default view: latest modified";
+                    font-size: 11px;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            HorizontalBox {
+                spacing: 8px;
+                alignment: end;
+
+                Button {
+                    text: AppState.active-tab == 0 ? "● Last Updated" : "Last Updated";
+                    primary: AppState.active-tab == 0;
+                    clicked => { AppLogic.tab-changed(0); }
+                }
+
+                Button {
+                    text: AppState.active-tab == 1 ? "● Newest (RSS)" : "Newest (RSS)";
+                    primary: AppState.active-tab == 1;
+                    clicked => { AppLogic.tab-changed(1); }
+                }
+
+                Button {
+                    text: AppState.loading ? "Loading…" : "↻ Refresh";
+                    enabled: !AppState.loading;
+                    clicked => { AppLogic.refresh-requested(); }
+                }
+            }
+        }
+
+        // Search filter bar
+        HorizontalBox {
+            spacing: 8px;
+
+            LineEdit {
+                text <=> AppState.search-filter;
+                placeholder-text: "Filter packages by name, description, or maintainer…";
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: AppState.packages.length + " items";
+                font-size: 12px;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+        }
+
+        // Loading spinner bar
+        if AppState.loading: ProgressIndicator {
+            indeterminate: true;
+            height: 4px;
+        }
+
+        // Main scrollable list
+        ScrollView {
+            vertical-stretch: 1;
+            horizontal-scrollbar-policy: always-off;
+
+            VerticalLayout {
+                padding-right: 12px;
+                padding-bottom: 8px;
+                spacing: 8px;
+
+                for pkg in AppState.packages: Rectangle {
+                    visible: AppState.search-filter == ""
+                        || pkg.name == AppState.search-filter
+                        || pkg.description == AppState.search-filter;
+
+                    height: self.visible ? 105px : 0px;
+
+                    PackageCard {
+                        pkg: pkg;
+                        width: 100%;
+                        height: 100%;
+                    }
+                }
+
+                if AppState.packages.length == 0 && !AppState.loading: Text {
+                    text: "No packages to show. Click Refresh to fetch latest modified packages.";
+                    font-size: 14px;
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // Footer status bar
+        HorizontalBox {
+            spacing: 8px;
+            Text {
+                text: AppState.status-text;
+                font-size: 11px;
+                color: Theme.text-secondary;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}

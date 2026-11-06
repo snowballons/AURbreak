@@ -1,0 +1,38 @@
+[package]
+name = "browse-arch"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+slint = "1.17"
+reqwest = { version = "0.12.28", features = ["blocking", "rustls-tls"] }
+scraper = "0.27"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "6"
+chrono = { version = "0.4", features = ["serde"] }
+open = "5"
+
+[build-dependencies]
+slint-build = "1.17"
+
+# Release: "thin" LTO gives near-fat-LTO benefit at a fraction of the compile
+# time. The full "fat" LTO here exceeds the build budget (Slint's dep tree is
+# large), so "thin" is the pragmatic choice for a shippable binary.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Keep dependency compilation cheap in dev so `cargo test`/`cargo clippy` stay
+# usable instead of timing out on the Slint + reqwest tree.
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.test]
+opt-level = 1
