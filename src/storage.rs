@@ -178,6 +178,9 @@ mod tests {
     where
         F: FnOnce() -> R,
     {
+        // BROWSE_ARCH_TEST_DIR is process-global; serialize tests that mutate it.
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = LOCK.lock().unwrap();
         let prev = std::env::var("BROWSE_ARCH_TEST_DIR").ok();
         std::env::set_var("BROWSE_ARCH_TEST_DIR", dir);
         let r = f();
