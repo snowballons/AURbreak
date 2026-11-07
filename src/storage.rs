@@ -140,6 +140,95 @@ pub fn save(packages: &[AurPackage], fetched_at: DateTime<Utc>) {
     let _ = std::fs::rename(&tmp, &path);
 }
 
+/// Persistent user settings configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppConfig {
+    pub theme_mode: i32,        // 0 = System, 1 = Dark, 2 = Light
+    pub aur_helper: String,     // "yay", "paru", "pikaur", "aura", "pacman"
+    pub default_search_by: i32, // 0..7 (SearchBy enum index)
+    pub search_page_size: i32,  // 25, 50, 100
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            theme_mode: 0,
+            aur_helper: "yay".to_string(),
+            default_search_by: 1, // NameDesc (index 1)
+            search_page_size: 50,
+        }
+    }
+}
+
+/// Resolve the config file path.
+pub fn config_file() -> PathBuf {
+    if let Ok(dir) = std::env::var("BROWSE_ARCH_TEST_DIR") {
+        let p = PathBuf::from(dir);
+        ensure_parent(&p);
+        return p.join("config.json");
+    }
+    project_dir().join("config.json")
+}
+
+/// Load configuration from disk, falling back to defaults if not found or corrupted.
+pub fn load_config() -> AppConfig {
+    let path = config_file();
+    if !path.exists() {
+        return AppConfig::default();
+    }
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Err(_) => AppConfig::default(),
+    }
+}
+
+/// Persist configuration atomically to disk.
+pub fn save_config(config: &AppConfig) {
+    let path = config_file();
+    ensure_parent(&path);
+    let bytes = match serde_json::to_vec_pretty(config) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+    let tmp = path.with_extension("json.tmp");
+    if std::fs::write(&tmp, &bytes).is_err() {
+        return;
+    }
+    let _ = std::fs::rename(&tmp, &path);
+}
+
+/// Delete local cache files (cache.json and cache.json.bak).
+pub fn clear_cache() -> std::io::Result<()> {
+    let path = data_file();
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
+    let bak = path.with_extension("json.bak");
+    if bak.exists() {
+        let _ = std::fs::remove_file(&bak);
+    }
+    Ok(())
+}
+
+/// Return formatted cache file path and human-readable size.
+pub fn cache_stats() -> (String, String) {
+    let path = data_file();
+    let path_str = path.to_string_lossy().to_string();
+    if path.exists() {
+        let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let size_str = if bytes < 1024 {
+            format!("{} bytes", bytes)
+        } else if bytes < 1024 * 1024 {
+            format!("{:.1} KB", bytes as f64 / 1024.0)
+        } else {
+            format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
+        };
+        (path_str, format!("Cached file size: {}", size_str))
+    } else {
+        (path_str, "No cached data yet (0 bytes)".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +318,45 @@ mod tests {
                 other => panic!("expected CorruptRecovered, got {other:?}"),
             }
             assert!(!path.exists());
+        });
+    }
+
+    #[test]
+    fn test_config_roundtrip() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            let mut cfg = load_config();
+            assert_eq!(cfg, AppConfig::default());
+
+            cfg.theme_mode = 1;
+            cfg.aur_helper = "paru".to_string();
+            cfg.default_search_by = 2;
+            cfg.search_page_size = 25;
+            save_config(&cfg);
+
+            let loaded = load_config();
+            assert_eq!(loaded, cfg);
+        });
+    }
+
+    #[test]
+    fn test_clear_cache() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            let path = data_file();
+            ensure_parent(&path);
+            fs::write(&path, b"test cache").unwrap();
+            assert!(path.exists());
+
+            let (p_str, status) = cache_stats();
+            assert!(!p_str.is_empty());
+            assert!(status.contains("Cached file size"));
+
+            clear_cache().expect("clear_cache failed");
+            assert!(!path.exists());
+
+            let (_, empty_status) = cache_stats();
+            assert!(empty_status.contains("No cached data"));
         });
     }
 }

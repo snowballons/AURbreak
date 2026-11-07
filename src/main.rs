@@ -249,12 +249,56 @@ fn main() {
             eprintln!("Failed to save dark detail snapshot: {e}");
         }
 
+        // Snapshot 6: Settings View (Light)
+        let ui_settings = AppWindow::new().expect("Failed to create settings window");
+        let state_settings = ui_settings.global::<AppState>();
+        state_settings.set_show_settings(true);
+        state_settings.set_cache_path("/home/jonnie/.local/share/browse-arch/cache.json".into());
+        state_settings.set_cache_size_str("Cached file size: 142.5 KB".into());
+        state_settings.set_aur_helper("yay".into());
+        state_settings.set_default_search_by(1);
+        state_settings.set_search_page_size(50);
+        state_settings.set_theme_mode(0);
+        if let Err(e) = save_snapshot(&ui_settings, &format!("{out_dir}/aur-view-settings.png")) {
+            eprintln!("Failed to save settings snapshot: {e}");
+        }
+
+        // Snapshot 7: Settings View (Dark)
+        let ui_settings_dark = AppWindow::new().expect("Failed to create dark settings window");
+        ui_settings_dark.global::<Theme>().set_force_dark(true);
+        let state_settings_dark = ui_settings_dark.global::<AppState>();
+        state_settings_dark.set_show_settings(true);
+        state_settings_dark.set_cache_path("/home/jonnie/.local/share/browse-arch/cache.json".into());
+        state_settings_dark.set_cache_size_str("Cached file size: 142.5 KB".into());
+        state_settings_dark.set_aur_helper("yay".into());
+        state_settings_dark.set_default_search_by(1);
+        state_settings_dark.set_search_page_size(50);
+        state_settings_dark.set_theme_mode(1);
+        if let Err(e) = save_snapshot(&ui_settings_dark, &format!("{out_dir}/aur-view-settings-dark.png")) {
+            eprintln!("Failed to save dark settings snapshot: {e}");
+        }
+
         println!("Snapshots generated successfully!");
         return;
     }
 
     let (tx, rx) = mpsc::channel::<BackgroundMsg>();
     let current_pkgs = Rc::new(RefCell::new(Vec::<AurPackage>::new()));
+
+    // Load saved settings & cache stats
+    let config = storage::load_config();
+    {
+        let state = ui.global::<AppState>();
+        let (cache_path, cache_size) = storage::cache_stats();
+        state.set_cache_path(cache_path.into());
+        state.set_cache_size_str(cache_size.into());
+        state.set_theme_mode(config.theme_mode);
+        state.set_aur_helper(config.aur_helper.into());
+        state.set_default_search_by(config.default_search_by);
+        state.set_search_by(config.default_search_by);
+        state.set_search_page_size(config.search_page_size);
+        ui.global::<Theme>().set_theme_mode(config.theme_mode);
+    }
 
     // Offline-first: paint from the local cache immediately, then refresh in
     // the background if the cache is empty or stale (older than 6 hours).
@@ -318,6 +362,7 @@ fn main() {
     ui.global::<AppLogic>().on_tab_changed(move |new_tab| {
         if let Some(app) = ui_weak.upgrade() {
             let state = app.global::<AppState>();
+            state.set_show_settings(false);
             state.set_active_tab(new_tab);
             state.set_search_filter("".into());
             if new_tab == 0 {
@@ -344,6 +389,77 @@ fn main() {
         let s = raw_url.to_string();
         if !s.is_empty() {
             let _ = open::that(&s);
+        }
+    });
+
+    // Settings callbacks
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_toggle_settings(move || {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            let curr = state.get_show_settings();
+            state.set_show_settings(!curr);
+            if !curr {
+                let (p, s) = storage::cache_stats();
+                state.set_cache_path(p.into());
+                state.set_cache_size_str(s.into());
+            }
+        }
+    });
+
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_close_settings(move || {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            state.set_show_settings(false);
+        }
+    });
+
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_theme_mode_changed(move |mode| {
+        if let Some(app) = ui_weak.upgrade() {
+            app.global::<Theme>().set_theme_mode(mode);
+            let mut cfg = storage::load_config();
+            cfg.theme_mode = mode;
+            storage::save_config(&cfg);
+        }
+    });
+
+    ui.global::<AppLogic>().on_aur_helper_changed(move |helper| {
+        let mut cfg = storage::load_config();
+        cfg.aur_helper = helper.to_string();
+        storage::save_config(&cfg);
+    });
+
+    ui.global::<AppLogic>().on_default_search_by_changed(move |by| {
+        let mut cfg = storage::load_config();
+        cfg.default_search_by = by;
+        storage::save_config(&cfg);
+    });
+
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_search_page_size_changed(move |size| {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            let count = state.get_search_result_count();
+            if count > 0 && size > 0 {
+                state.set_search_total_pages(((count as f64) / (size as f64)).ceil().max(1.0) as i32);
+            }
+            let mut cfg = storage::load_config();
+            cfg.search_page_size = size;
+            storage::save_config(&cfg);
+        }
+    });
+
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_clear_cache_requested(move || {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            let _ = storage::clear_cache();
+            let (p, s) = storage::cache_stats();
+            state.set_cache_path(p.into());
+            state.set_cache_size_str(s.into());
+            state.set_status_text("Local cache cleared successfully.".into());
         }
     });
 
@@ -566,8 +682,9 @@ fn main() {
                                     let filter = state.get_search_filter().to_string();
                                     apply_filter(&app, &aur_pkgs, &filter);
                                     state.set_search_result_count(search_result.resultcount);
+                                    let page_size = state.get_search_page_size().max(10);
                                     state.set_search_total_pages(
-                                        ((search_result.resultcount as f64) / 50.0).ceil().max(1.0) as i32,
+                                        ((search_result.resultcount as f64) / (page_size as f64)).ceil().max(1.0) as i32,
                                     );
                                     state.set_last_fetched_str("just now".into());
                                     state.set_status_text(

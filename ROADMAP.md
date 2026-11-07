@@ -51,6 +51,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 | **Phase 2** | Package Detail View & Inspector | ✅ Complete |
 | **Phase 2.5** | UI/UX Overhaul & Layout Restructuring | ✅ Complete |
 | **Phase 3** | Autocomplete & Search Polish | 🟡 In Progress |
+| **Phase 3.5** | Settings & Preferences Configuration | ✅ Complete |
 | **Phase 4** | Advanced Features (Installed, Multi-info, Grouping) | ⬜ Planned |
 | **Phase 5** | Testing, CI & Packaging | 🟡 Active |
 
@@ -140,6 +141,32 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 
 ---
 
+### Phase 3.5: Settings & User Preferences ✅ (Complete)
+
+- [x] **Settings Button & Navigation**:
+  - Dedicated `[ ⚙ Settings ]` header button next to Refresh with active state indicator.
+  - Full-page responsive `SettingsView` with `[ ← Back to Packages ]` and <kbd>Esc</kbd> shortcut handler.
+- [x] **Configuration Persistence (`storage.rs`)**:
+  - Atomic JSON configuration persistence (`~/.local/share/browse-arch/config.json`).
+  - Unit tests for configuration roundtrip and recovery.
+- [x] **Appearance & Theme Switching**:
+  - Real-time live switching between `System Default`, `Dark Theme`, and `Light Theme`.
+  - Persisted user preference automatically applied at startup.
+- [x] **AUR Helper Integration**:
+  - Configurable preferred AUR helper (`yay`, `paru`, `pikaur`, `aura`, `pacman`).
+  - Automatically updates install commands (`>_ <helper> -S <pkg>`) in package inspector.
+- [x] **Search & Pagination Defaults**:
+  - Configurable default search criterion (`SearchBy` index 0..7).
+  - Configurable search page size (`25`, `50`, `100` results).
+- [x] **Offline Cache Management**:
+  - Cache file path and formatted disk usage display.
+  - Interactive `[ 🗑 Clear Cache ]` button with atomic deletion and status feedback.
+- [x] **Upstream Service & About**:
+  - Official AUR RPC v5 and RSS endpoint references with OpenAPI link.
+  - App branding, version tag (`v0.1.0`), and Arch Linux portal links.
+
+---
+
 ### Phase 4: Advanced Features ⬜ (Planned)
 
 - [ ] **Multi-Info Batch Fetch**:
@@ -153,9 +180,6 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
   - Expandable group headers with base package details.
 - [ ] **Search Sharing & URL Handling**:
   - Support startup arguments and URL scheme parsing (e.g. `browse-arch --search yay --by name-desc`).
-- [ ] **Persistent Theme Preference**:
-  - Save explicit user preference (System / Dark / Light) in `storage.rs`.
-  - Manual theme toggle in the header.
 - [ ] **Context Menu**:
   - Right-click context menu on `PackageCard` using Slint's `ContextMenuArea`: "Copy package name", "Copy install command", "Open in AUR".
 

@@ -13,7 +13,8 @@ export struct PackageItem {
 // Global Theme: semantic tokens for dark and light modes
 export global Theme {
     in-out property <bool> force-dark: false;
-    out property <bool> dark: force-dark || Palette.color-scheme == ColorScheme.dark;
+    in-out property <int> theme-mode: 0; // 0 = System, 1 = Dark, 2 = Light
+    out property <bool> dark: theme-mode == 1 || (theme-mode == 0 && (force-dark || Palette.color-scheme == ColorScheme.dark));
 
     // Backgrounds
     out property <color> window-bg: dark ? #0b0f19 : #f8fafc;
@@ -92,6 +93,17 @@ export global AppState {
     in-out property <string> detail-last-modified: "";
     in-out property <string> detail-out-of-date: "";
     in-out property <string> detail-submitter: "";
+
+    // Settings state
+    in-out property <bool> show-settings: false;
+    in-out property <int> theme-mode: 0; // 0 = System, 1 = Dark, 2 = Light
+    in-out property <string> aur-helper: "yay"; // yay, paru, pikaur, aura, pacman
+    in-out property <int> default-search-by: 1; // index 0..7
+    in-out property <int> search-page-size: 50; // 25, 50, 100
+    in-out property <string> cache-path: "";
+    in-out property <string> cache-size-str: "";
+    in-out property <string> api-endpoint: "https://aur.archlinux.org/rpc/v5";
+    in-out property <string> app-version: "0.1.0";
 }
 
 // Global logic callbacks handled by Rust
@@ -100,6 +112,15 @@ export global AppLogic {
     callback open-pkg-page(string);
     callback open-url(string);
     callback tab-changed(int);
+
+    // Settings callbacks
+    callback toggle-settings();
+    callback close-settings();
+    callback theme-mode-changed(int);
+    callback aur-helper-changed(string);
+    callback default-search-by-changed(int);
+    callback search-page-size-changed(int);
+    callback clear-cache-requested();
 
     // Search callbacks
     callback search-requested(string, int, int);
@@ -619,7 +640,7 @@ component PackageDetail inherits Rectangle {
                                 color: Theme.text-accent;
                             }
                             Text {
-                                text: "yay -S " + root.name;
+                                text: AppState.aur-helper + " -S " + root.name;
                                 font-size: 12px;
                                 font-weight: 600;
                                 color: Theme.text-primary;
@@ -627,7 +648,7 @@ component PackageDetail inherits Rectangle {
                         }
 
                         Text {
-                            text: "Install with yay or your preferred AUR helper";
+                            text: "Install with " + AppState.aur-helper + " or your preferred AUR helper";
                             font-size: 10px;
                             color: Theme.text-muted;
                         }
@@ -973,6 +994,863 @@ component PackageDetail inherits Rectangle {
     }
 }
 
+component SettingsSectionCard inherits Rectangle {
+    in property <string> title: "";
+    in property <string> subtitle: "";
+
+    background: Theme.card-bg;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.border-default;
+
+    VerticalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 10px;
+
+        VerticalLayout {
+            spacing: 2px;
+            Text {
+                text: root.title;
+                font-size: 14px;
+                font-weight: 700;
+                color: Theme.text-primary;
+            }
+            if root.subtitle != "": Text {
+                text: root.subtitle;
+                font-size: 11px;
+                color: Theme.text-secondary;
+            }
+        }
+
+        @children
+    }
+}
+
+component SettingsView inherits Rectangle {
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 14px;
+
+        // Settings Top Bar
+        HorizontalLayout {
+            height: 38px;
+            vertical-stretch: 0;
+            alignment: space-between;
+
+            VerticalLayout {
+                spacing: 1px;
+                alignment: center;
+                Text {
+                    text: "Settings";
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: Theme.text-primary;
+                }
+                Text {
+                    text: "Configure appearance, AUR helper, search defaults, and local cache";
+                    font-size: 11px;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            Rectangle {
+                height: 32px;
+                background: back-touch.has-hover ? Theme.card-bg-hover : Theme.card-bg;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                animate background { duration: 150ms; }
+
+                back-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { AppLogic.close-settings(); }
+                }
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    alignment: center;
+                    spacing: 6px;
+                    Text {
+                        text: "← Back to Packages";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-accent;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Scrollable Settings Sections
+        ScrollView {
+            vertical-stretch: 1;
+            horizontal-scrollbar-policy: always-off;
+
+            VerticalLayout {
+                padding-right: 12px;
+                padding-bottom: 24px;
+                spacing: 16px;
+                alignment: start;
+
+                // 1. Appearance & Theme
+                SettingsSectionCard {
+                    title: "🎨 Appearance & Theme";
+                    subtitle: "Select your preferred color scheme across the entire application";
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        alignment: start;
+
+                        // System Default
+                        Rectangle {
+                            height: 34px;
+                            border-radius: 6px;
+                            background: AppState.theme-mode == 0 ? Theme.pill-active-bg : (sys-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                            border-width: 1px;
+                            border-color: AppState.theme-mode == 0 ? Theme.border-selected : Theme.border-subtle;
+                            animate background { duration: 150ms; }
+
+                            sys-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    AppState.theme-mode = 0;
+                                    Theme.theme-mode = 0;
+                                    AppLogic.theme-mode-changed(0);
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                alignment: center;
+                                spacing: 6px;
+                                Text { text: "💻"; font-size: 12px; vertical-alignment: center; }
+                                Text {
+                                    text: "System Default";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: AppState.theme-mode == 0 ? #ffffff : Theme.text-primary;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Dark Theme
+                        Rectangle {
+                            height: 34px;
+                            border-radius: 6px;
+                            background: AppState.theme-mode == 1 ? Theme.pill-active-bg : (dark-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                            border-width: 1px;
+                            border-color: AppState.theme-mode == 1 ? Theme.border-selected : Theme.border-subtle;
+                            animate background { duration: 150ms; }
+
+                            dark-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    AppState.theme-mode = 1;
+                                    Theme.theme-mode = 1;
+                                    AppLogic.theme-mode-changed(1);
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                alignment: center;
+                                spacing: 6px;
+                                Text { text: "🌙"; font-size: 12px; vertical-alignment: center; }
+                                Text {
+                                    text: "Dark Theme";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: AppState.theme-mode == 1 ? #ffffff : Theme.text-primary;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Light Theme
+                        Rectangle {
+                            height: 34px;
+                            border-radius: 6px;
+                            background: AppState.theme-mode == 2 ? Theme.pill-active-bg : (light-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                            border-width: 1px;
+                            border-color: AppState.theme-mode == 2 ? Theme.border-selected : Theme.border-subtle;
+                            animate background { duration: 150ms; }
+
+                            light-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    AppState.theme-mode = 2;
+                                    Theme.theme-mode = 2;
+                                    AppLogic.theme-mode-changed(2);
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                alignment: center;
+                                spacing: 6px;
+                                Text { text: "☀️"; font-size: 12px; vertical-alignment: center; }
+                                Text {
+                                    text: "Light Theme";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: AppState.theme-mode == 2 ? #ffffff : Theme.text-primary;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. AUR Helper & Terminal Command
+                SettingsSectionCard {
+                    title: "📦 AUR Helper & Terminal Command";
+                    subtitle: "Select which helper to use when generating quick installation commands in the package inspector";
+
+                    VerticalLayout {
+                        spacing: 10px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+
+                            // yay
+                            Rectangle {
+                                height: 32px;
+                                border-radius: 6px;
+                                background: AppState.aur-helper == "yay" ? Theme.pill-active-bg : (yay-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                border-width: 1px;
+                                border-color: AppState.aur-helper == "yay" ? Theme.border-selected : Theme.border-subtle;
+                                animate background { duration: 150ms; }
+
+                                yay-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        AppState.aur-helper = "yay";
+                                        AppLogic.aur-helper-changed("yay");
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    alignment: center;
+                                    Text {
+                                        text: "yay";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: AppState.aur-helper == "yay" ? #ffffff : Theme.text-primary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // paru
+                            Rectangle {
+                                height: 32px;
+                                border-radius: 6px;
+                                background: AppState.aur-helper == "paru" ? Theme.pill-active-bg : (paru-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                border-width: 1px;
+                                border-color: AppState.aur-helper == "paru" ? Theme.border-selected : Theme.border-subtle;
+                                animate background { duration: 150ms; }
+
+                                paru-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        AppState.aur-helper = "paru";
+                                        AppLogic.aur-helper-changed("paru");
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    alignment: center;
+                                    Text {
+                                        text: "paru";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: AppState.aur-helper == "paru" ? #ffffff : Theme.text-primary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // pikaur
+                            Rectangle {
+                                height: 32px;
+                                border-radius: 6px;
+                                background: AppState.aur-helper == "pikaur" ? Theme.pill-active-bg : (pikaur-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                border-width: 1px;
+                                border-color: AppState.aur-helper == "pikaur" ? Theme.border-selected : Theme.border-subtle;
+                                animate background { duration: 150ms; }
+
+                                pikaur-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        AppState.aur-helper = "pikaur";
+                                        AppLogic.aur-helper-changed("pikaur");
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    alignment: center;
+                                    Text {
+                                        text: "pikaur";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: AppState.aur-helper == "pikaur" ? #ffffff : Theme.text-primary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // aura
+                            Rectangle {
+                                height: 32px;
+                                border-radius: 6px;
+                                background: AppState.aur-helper == "aura" ? Theme.pill-active-bg : (aura-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                border-width: 1px;
+                                border-color: AppState.aur-helper == "aura" ? Theme.border-selected : Theme.border-subtle;
+                                animate background { duration: 150ms; }
+
+                                aura-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        AppState.aur-helper = "aura";
+                                        AppLogic.aur-helper-changed("aura");
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    alignment: center;
+                                    Text {
+                                        text: "aura";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: AppState.aur-helper == "aura" ? #ffffff : Theme.text-primary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // pacman
+                            Rectangle {
+                                height: 32px;
+                                border-radius: 6px;
+                                background: AppState.aur-helper == "pacman" ? Theme.pill-active-bg : (pacman-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                border-width: 1px;
+                                border-color: AppState.aur-helper == "pacman" ? Theme.border-selected : Theme.border-subtle;
+                                animate background { duration: 150ms; }
+
+                                pacman-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        AppState.aur-helper = "pacman";
+                                        AppLogic.aur-helper-changed("pacman");
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    alignment: center;
+                                    Text {
+                                        text: "pacman";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: AppState.aur-helper == "pacman" ? #ffffff : Theme.text-primary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Preview Box
+                        Rectangle {
+                            background: Theme.code-bg;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                padding-top: 8px;
+                                padding-bottom: 8px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                Text {
+                                    text: ">_";
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: Theme.text-accent;
+                                }
+
+                                Text {
+                                    text: AppState.aur-helper + " -S <package-name>";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Search & Browsing Defaults
+                SettingsSectionCard {
+                    title: "🔍 Search & Browsing Defaults";
+                    subtitle: "Customize default search filter category and pagination page size";
+
+                    VerticalLayout {
+                        spacing: 12px;
+
+                        // Default Search By
+                        HorizontalLayout {
+                            spacing: 16px;
+                            alignment: space-between;
+
+                            VerticalLayout {
+                                spacing: 1px;
+                                alignment: center;
+                                Text {
+                                    text: "Default Search Category";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: "Field targeted by default when opening the Search tab";
+                                    font-size: 11px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+
+                            ComboBox {
+                                width: 220px;
+                                model: [
+                                    "Name only",
+                                    "Name & description",
+                                    "Depends",
+                                    "Check depends",
+                                    "Opt depends",
+                                    "Make depends",
+                                    "Maintainer",
+                                    "Submitter"
+                                ];
+                                current-index <=> AppState.default-search-by;
+                                selected(val) => {
+                                    AppLogic.default-search-by-changed(self.current-index);
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border-subtle;
+                        }
+
+                        // Results Per Page
+                        HorizontalLayout {
+                            spacing: 16px;
+                            alignment: space-between;
+
+                            VerticalLayout {
+                                spacing: 1px;
+                                alignment: center;
+                                Text {
+                                    text: "Search Results Per Page";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: "Number of packages displayed per search results page";
+                                    font-size: 11px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: end;
+
+                                // 25
+                                Rectangle {
+                                    height: 30px;
+                                    width: 46px;
+                                    border-radius: 6px;
+                                    background: AppState.search-page-size == 25 ? Theme.pill-active-bg : (size25-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                    border-width: 1px;
+                                    border-color: AppState.search-page-size == 25 ? Theme.border-selected : Theme.border-subtle;
+                                    animate background { duration: 150ms; }
+
+                                    size25-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            AppState.search-page-size = 25;
+                                            AppLogic.search-page-size-changed(25);
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Text {
+                                            text: "25";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: AppState.search-page-size == 25 ? #ffffff : Theme.text-primary;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                // 50
+                                Rectangle {
+                                    height: 30px;
+                                    width: 46px;
+                                    border-radius: 6px;
+                                    background: AppState.search-page-size == 50 ? Theme.pill-active-bg : (size50-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                    border-width: 1px;
+                                    border-color: AppState.search-page-size == 50 ? Theme.border-selected : Theme.border-subtle;
+                                    animate background { duration: 150ms; }
+
+                                    size50-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            AppState.search-page-size = 50;
+                                            AppLogic.search-page-size-changed(50);
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Text {
+                                            text: "50";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: AppState.search-page-size == 50 ? #ffffff : Theme.text-primary;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                // 100
+                                Rectangle {
+                                    height: 30px;
+                                    width: 46px;
+                                    border-radius: 6px;
+                                    background: AppState.search-page-size == 100 ? Theme.pill-active-bg : (size100-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg);
+                                    border-width: 1px;
+                                    border-color: AppState.search-page-size == 100 ? Theme.border-selected : Theme.border-subtle;
+                                    animate background { duration: 150ms; }
+
+                                    size100-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            AppState.search-page-size = 100;
+                                            AppLogic.search-page-size-changed(100);
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Text {
+                                            text: "100";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: AppState.search-page-size == 100 ? #ffffff : Theme.text-primary;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. Local Offline Cache
+                SettingsSectionCard {
+                    title: "💾 Local Offline Cache";
+                    subtitle: "AURbreak stores latest package lists locally to provide rapid offline browsing and startup";
+
+                    HorizontalLayout {
+                        spacing: 16px;
+                        alignment: space-between;
+
+                        VerticalLayout {
+                            spacing: 4px;
+                            horizontal-stretch: 1;
+
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text { text: "📁"; font-size: 12px; vertical-alignment: center; }
+                                Text {
+                                    text: AppState.cache-path != "" ? AppState.cache-path : "(XDG Data Directory)";
+                                    font-size: 11px;
+                                    font-weight: 500;
+                                    color: Theme.text-primary;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+
+                            Text {
+                                text: AppState.cache-size-str != "" ? AppState.cache-size-str : "Atomic JSON storage with .bak backup recovery";
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                        }
+
+                        Rectangle {
+                            height: 32px;
+                            border-radius: 6px;
+                            background: clear-touch.has-hover ? Theme.warning : Theme.section-bg;
+                            border-width: 1px;
+                            border-color: Theme.warning;
+                            animate background { duration: 150ms; }
+
+                            clear-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { AppLogic.clear-cache-requested(); }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                alignment: center;
+                                spacing: 6px;
+
+                                Text {
+                                    text: "🗑";
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+
+                                Text {
+                                    text: "Clear Cache";
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    color: clear-touch.has-hover ? #ffffff : Theme.warning;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 5. Network & Official AUR Services
+                SettingsSectionCard {
+                    title: "🌐 Network & Official AUR Services";
+                    subtitle: "Endpoints and official RPC v5 interface provided by the Arch User Repository";
+
+                    VerticalLayout {
+                        spacing: 10px;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+
+                            VerticalLayout {
+                                spacing: 4px;
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "RPC v5 Base:";
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        color: Theme.text-secondary;
+                                    }
+                                    Text {
+                                        text: "https://aur.archlinux.org/rpc/v5";
+                                        font-size: 11px;
+                                        color: Theme.text-primary;
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "RSS Feed:";
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        color: Theme.text-secondary;
+                                    }
+                                    Text {
+                                        text: "https://aur.archlinux.org/rss/modified";
+                                        font-size: 11px;
+                                        color: Theme.text-primary;
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                height: 30px;
+                                border-radius: 6px;
+                                background: Theme.pill-bg;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { AppLogic.open-url("https://aur.archlinux.org/rpc/openapi.json"); }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    alignment: center;
+                                    spacing: 6px;
+                                    Text {
+                                        text: "↗ View OpenAPI Spec";
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        color: Theme.text-accent;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 6. About AURbreak
+                SettingsSectionCard {
+                    title: "ℹ️ About AURbreak";
+                    subtitle: "Desktop browser for Arch Linux User Repository (AUR)";
+
+                    HorizontalLayout {
+                        spacing: 16px;
+                        alignment: space-between;
+
+                        HorizontalLayout {
+                            spacing: 14px;
+                            alignment: start;
+
+                            Image {
+                                source: @image-url("assets/aurbreak-icon-app.svg");
+                                width: 44px;
+                                height: 44px;
+                            }
+
+                            VerticalLayout {
+                                spacing: 2px;
+                                alignment: center;
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "AURbreak";
+                                        font-size: 15px;
+                                        font-weight: 700;
+                                        color: Theme.text-primary;
+                                    }
+                                    Rectangle {
+                                        height: 20px;
+                                        border-radius: 4px;
+                                        background: Theme.pill-bg;
+                                        HorizontalLayout {
+                                            padding-left: 6px;
+                                            padding-right: 6px;
+                                            alignment: center;
+                                            Text {
+                                                text: "v" + AppState.app-version;
+                                                font-size: 10px;
+                                                font-weight: 600;
+                                                color: Theme.text-secondary;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "Built with Rust and Slint • Lightweight, seek-safe & native UI";
+                                    font-size: 11px;
+                                    color: Theme.text-secondary;
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: end;
+
+                            // Arch Home link
+                            Rectangle {
+                                height: 30px;
+                                border-radius: 6px;
+                                background: Theme.pill-bg;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { AppLogic.open-url("https://archlinux.org"); }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    alignment: center;
+                                    Text {
+                                        text: "Arch Linux ↗";
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        color: Theme.text-accent;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // AUR Home link
+                            Rectangle {
+                                height: 30px;
+                                border-radius: 6px;
+                                background: Theme.pill-bg;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { AppLogic.open-url("https://aur.archlinux.org"); }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    alignment: center;
+                                    Text {
+                                        text: "AUR Portal ↗";
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        color: Theme.text-accent;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Top Level Application Window
 export component AppWindow inherits Window {
     title: "AURbreak — Arch Linux AUR Package Browser";
@@ -990,6 +1868,10 @@ export component AppWindow inherits Window {
 
         key-pressed(ev) => {
             if (ev.text == Key.Escape) {
+                if (AppState.show-settings) {
+                    AppLogic.close-settings();
+                    return accept;
+                }
                 if (AppState.show-detail) {
                     AppLogic.close-detail();
                     return accept;
@@ -1058,67 +1940,130 @@ export component AppWindow inherits Window {
                         NavTab {
                             icon: "⚡";
                             title: "Last Modified";
-                            active: AppState.active-tab == 0;
-                            clicked => { AppLogic.tab-changed(0); }
+                            active: AppState.active-tab == 0 && !AppState.show-settings;
+                            clicked => {
+                                AppState.show-settings = false;
+                                AppLogic.tab-changed(0);
+                            }
                         }
 
                         NavTab {
                             icon: "✨";
                             title: "Newest";
-                            active: AppState.active-tab == 1;
-                            clicked => { AppLogic.tab-changed(1); }
+                            active: AppState.active-tab == 1 && !AppState.show-settings;
+                            clicked => {
+                                AppState.show-settings = false;
+                                AppLogic.tab-changed(1);
+                            }
                         }
 
                         NavTab {
                             icon: "🔍";
                             title: "Search AUR";
-                            active: AppState.active-tab == 2;
-                            clicked => { AppLogic.tab-changed(2); }
+                            active: AppState.active-tab == 2 && !AppState.show-settings;
+                            clicked => {
+                                AppState.show-settings = false;
+                                AppLogic.tab-changed(2);
+                            }
                         }
                     }
                 }
 
-                // Refresh action button
-                Rectangle {
-                    height: 34px;
-                    background: refresh-touch.has-hover ? Theme.card-bg-hover : Theme.card-bg;
-                    border-radius: 6px;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    animate background { duration: 150ms; }
+                // Right action buttons (Refresh + Settings)
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
 
-                    refresh-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        enabled: !AppState.loading;
-                        clicked => { AppLogic.refresh-requested(); }
-                    }
+                    // Refresh action button
+                    Rectangle {
+                        height: 34px;
+                        background: refresh-touch.has-hover ? Theme.card-bg-hover : Theme.card-bg;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        animate background { duration: 150ms; }
 
-                    HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 6px;
-                        alignment: center;
-
-                        Text {
-                            text: AppState.loading ? "⏳" : "↻";
-                            font-size: 12px;
-                            vertical-alignment: center;
-                            color: AppState.loading ? Theme.text-muted : Theme.text-accent;
+                        refresh-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            enabled: !AppState.loading;
+                            clicked => { AppLogic.refresh-requested(); }
                         }
 
-                        Text {
-                            text: AppState.loading ? "Fetching…" : "Refresh";
-                            font-size: 12px;
-                            font-weight: 600;
-                            color: AppState.loading ? Theme.text-muted : Theme.text-primary;
-                            vertical-alignment: center;
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 6px;
+                            alignment: center;
+
+                            Text {
+                                text: AppState.loading ? "⏳" : "↻";
+                                font-size: 12px;
+                                vertical-alignment: center;
+                                color: AppState.loading ? Theme.text-muted : Theme.text-accent;
+                            }
+
+                            Text {
+                                text: AppState.loading ? "Fetching…" : "Refresh";
+                                font-size: 12px;
+                                font-weight: 600;
+                                color: AppState.loading ? Theme.text-muted : Theme.text-primary;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    // Settings action button
+                    Rectangle {
+                        height: 34px;
+                        background: AppState.show-settings
+                            ? Theme.pill-active-bg
+                            : (settings-touch.has-hover ? Theme.card-bg-hover : Theme.card-bg);
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: AppState.show-settings ? Theme.border-selected : Theme.border-default;
+                        animate background { duration: 150ms; }
+
+                        settings-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { AppLogic.toggle-settings(); }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 12px;
+                            spacing: 6px;
+                            alignment: center;
+
+                            Text {
+                                text: "⚙";
+                                font-size: 13px;
+                                color: AppState.show-settings ? #ffffff : Theme.text-primary;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: "Settings";
+                                font-size: 12px;
+                                font-weight: 600;
+                                color: AppState.show-settings ? #ffffff : Theme.text-primary;
+                                vertical-alignment: center;
+                            }
                         }
                     }
                 }
             }
 
-            // Search Bar (Tab 2) OR Filter Bar (Tab 0 & 1)
-            if AppState.active-tab == 2: SearchBar {
+            // If settings is open, show SettingsView; otherwise show normal package explorer
+            if AppState.show-settings: SettingsView {
+                vertical-stretch: 1;
+            }
+
+            if !AppState.show-settings: VerticalLayout {
+                vertical-stretch: 1;
+                spacing: 12px;
+
+                // Search Bar (Tab 2) OR Filter Bar (Tab 0 & 1)
+                if AppState.active-tab == 2: SearchBar {
                 vertical-stretch: 0;
                 query <=> AppState.search-query;
                 by <=> AppState.search-by;
@@ -1281,6 +2226,7 @@ export component AppWindow inherits Window {
                     submitter: AppState.detail-submitter;
                 }
             }
+        }
 
             // Footer Status Bar
             HorizontalLayout {
@@ -1301,7 +2247,9 @@ export component AppWindow inherits Window {
                     alignment: end;
 
                     Text {
-                        text: AppState.show-detail ? "Esc or ✕ to close inspector • Click cards to inspect" : "Click package card to inspect details";
+                        text: AppState.show-settings
+                            ? "Esc or ← to exit settings"
+                            : (AppState.show-detail ? "Esc or ✕ to close inspector • Click cards to inspect" : "Click package card to inspect details");
                         font-size: 11px;
                         color: Theme.text-muted;
                         vertical-alignment: center;
