@@ -69,13 +69,12 @@ pub fn save_snapshot(ui: &AppWindow, output_path: &str) -> Result<(), Box<dyn st
 }
 
 fn main() {
-    let ui = AppWindow::new().expect("Failed to create Slint window");
-
     // Headless snapshot mode for visual verification & screenshots
     if let Some(_target) = std::env::args().nth(1).filter(|a| a == "--snapshot") {
         let out_dir = std::env::args()
             .nth(2)
             .unwrap_or_else(|| "/tmp".to_string());
+        let _ = std::fs::create_dir_all(&out_dir);
         println!("Generating snapshots in {out_dir}...");
 
         let mock_pkgs = vec![
@@ -135,13 +134,14 @@ fn main() {
             },
         ];
 
-        let state = ui.global::<AppState>();
+        let ui_main = AppWindow::new().expect("Failed to create snapshot window");
+        let state = ui_main.global::<AppState>();
         state.set_active_tab(0);
         state.set_last_fetched_str("just now".into());
         state.set_status_text("Loaded 5 packages • Ready".into());
-        apply_filter(&ui, &mock_pkgs, "");
+        apply_filter(&ui_main, &mock_pkgs, "");
 
-        if let Err(e) = save_snapshot(&ui, &format!("{out_dir}/aur-view-last-modified.png")) {
+        if let Err(e) = save_snapshot(&ui_main, &format!("{out_dir}/aur-view-last-modified.png")) {
             eprintln!("Failed to save last-modified snapshot: {e}");
         }
 
@@ -299,6 +299,7 @@ fn main() {
         return;
     }
 
+    let ui = AppWindow::new().expect("Failed to create Slint window");
     let (tx, rx) = mpsc::channel::<BackgroundMsg>();
     let current_pkgs = Rc::new(RefCell::new(Vec::<AurPackage>::new()));
 

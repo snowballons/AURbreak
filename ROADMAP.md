@@ -203,7 +203,8 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
   - **Fedora / RHEL / openSUSE**: `.rpm` package via `cargo-generate-rpm`.
   - **Universal AppImage**: Portable standalone `.AppImage` via `appimagetool`.
   - **Generic Tarball**: Portable `.tar.gz` with `install.sh` installer script.
-  - **Automated Publishing**: Generates `SHA256SUMS.txt` and publishes GitHub Release assets on version tags (`v*`).
+  - **Automated AUR Publishing**: Automatic SSH push of `PKGBUILD` and generated `.SRCINFO` to `ssh://aur@aur.archlinux.org/<pkgname>.git`.
+  - **GitHub Release Publishing**: Generates `SHA256SUMS.txt` and publishes GitHub Release assets on version tags (`v*`).
 
 ---
 

@@ -364,3 +364,166 @@ jobs:
             release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------------------------------
+  # 5. AUR Publisher (Automatically pushes PKGBUILD & .SRCINFO to aur.archlinux.org)
+  # --------------------------------------------------------------------------
+  publish-aur:
+    name: Publish to Arch User Repository (AUR)
+    needs: [build-tarball-deb-rpm, publish]
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "PLAIN_VERSION=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Check AUR Credentials
+        id: check-auth
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY || secrets.AUR_SSH_KEY || secrets.AUR_KEY || secrets.AUR_PRIVATE_KEY }}
+        run: |
+          if [ -z "${AUR_KEY}" ]; then
+            echo "::warning::AUR SSH private key not configured in repository secrets. Skipping AUR publish."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Tarball Artifact
+        if: steps.check-auth.outputs.skip != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-tar-deb-rpm
+          path: release_tarball/
+
+      - name: Compute Tarball SHA256
+        if: steps.check-auth.outputs.skip != 'true'
+        id: sha
+        run: |
+          TAR_FILE=$(ls release_tarball/*.tar.gz | head -n 1)
+          SHA256=$(sha256sum "${TAR_FILE}" | awk '{print $1}')
+          echo "Tarball file: ${TAR_FILE}"
+          echo "Tarball SHA256: ${SHA256}"
+          echo "SHA256=${SHA256}" >> $GITHUB_OUTPUT
+
+      - name: Configure SSH for AUR
+        if: steps.check-auth.outputs.skip != 'true'
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY || secrets.AUR_SSH_KEY || secrets.AUR_KEY || secrets.AUR_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${AUR_KEY}" > ~/.ssh/aur_ed25519
+          chmod 600 ~/.ssh/aur_ed25519
+
+          ssh-keyscan -v -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+
+          cat << 'EOF' | sed 's/^[ ]\{10\}//' > ~/.ssh/config
+          Host aur.archlinux.org
+            User aur
+            IdentityFile ~/.ssh/aur_ed25519
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Clone, update PKGBUILD & push to AUR
+        if: steps.check-auth.outputs.skip != 'true'
+        env:
+          AUR_PKG: ${{ secrets.AUR_PACKAGE_NAME || secrets.AUR_PKGNAME || 'aurbreak-bin' }}
+          AUR_USER: ${{ secrets.AUR_USERNAME || secrets.AUR_USER || github.actor }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL || secrets.AUR_USER_EMAIL || 'aur@archlinux.org' }}
+          PLAIN_VERSION: ${{ steps.vars.outputs.PLAIN_VERSION }}
+          TAR_SHA256: ${{ steps.sha.outputs.SHA256 }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          echo "Publishing ${AUR_PKG} v${PLAIN_VERSION} to aur.archlinux.org..."
+          echo "Maintainer: ${AUR_USER} <${AUR_EMAIL}>"
+
+          if [ "${AUR_PKG}" = "aurbreak" ]; then
+            PROVIDES="('browse-arch')"
+            CONFLICTS="('aurbreak-bin')"
+          else
+            PROVIDES="('aurbreak' 'browse-arch')"
+            CONFLICTS="('aurbreak')"
+          fi
+
+          git clone "ssh://aur@aur.archlinux.org/${AUR_PKG}.git" aur-repo || {
+            echo "Clone failed or repo is empty/new. Initializing fresh repository."
+            mkdir -p aur-repo
+            cd aur-repo
+            git init -b master
+            git remote add origin "ssh://aur@aur.archlinux.org/${AUR_PKG}.git"
+            cd ..
+          }
+
+          cd aur-repo
+          git checkout -B master
+
+          cat << EOF | sed 's/^[ ]\{10\}//' > PKGBUILD
+          # Maintainer: ${AUR_USER} <${AUR_EMAIL}>
+          pkgname=${AUR_PKG}
+          _pkgname=aurbreak
+          pkgver=${PLAIN_VERSION}
+          pkgrel=1
+          pkgdesc="A fast, offline-first desktop browser for the Arch User Repository (AUR)"
+          arch=('x86_64')
+          url="${REPO_URL}"
+          license=('GPL-3.0-or-later')
+          depends=('fontconfig' 'libxkbcommon' 'hicolor-icon-theme')
+          optdepends=(
+              'yay: quick AUR package installation support'
+              'paru: alternative AUR helper support'
+              'pikaur: alternative AUR helper support'
+          )
+          provides=${PROVIDES}
+          conflicts=${CONFLICTS}
+          source=("\${_pkgname}-\${pkgver}-x86_64.tar.gz::\${url}/releases/download/v\${pkgver}/\${_pkgname}-v\${pkgver}-x86_64-unknown-linux-gnu.tar.gz")
+          sha256sums=('${TAR_SHA256}')
+
+          package() {
+              cd "\${srcdir}/\${_pkgname}-v\${pkgver}-x86_64-unknown-linux-gnu"
+              install -Dm755 aurbreak "\${pkgdir}/usr/bin/aurbreak"
+              ln -sf aurbreak "\${pkgdir}/usr/bin/browse-arch"
+              install -Dm644 packaging/aurbreak.desktop "\${pkgdir}/usr/share/applications/aurbreak.desktop"
+              install -Dm644 ui/assets/aurbreak-icon-app.svg "\${pkgdir}/usr/share/icons/hicolor/scalable/apps/aurbreak.svg"
+              install -Dm644 LICENSE "\${pkgdir}/usr/share/licenses/\${pkgname}/LICENSE"
+          }
+          EOF
+
+          docker run --rm -v "$(pwd):/build" -w /build archlinux:base-devel bash -c "
+            useradd -m builder
+            chown -R builder:builder /build
+            su builder -c 'makepkg --printsrcinfo' > /build/.SRCINFO
+          "
+
+          echo "=== PKGBUILD ==="
+          cat PKGBUILD
+          echo "=== .SRCINFO ==="
+          cat .SRCINFO
+
+          git config user.name "${AUR_USER}"
+          git config user.email "${AUR_EMAIL}"
+
+          git add PKGBUILD .SRCINFO
+          if git diff --staged --quiet; then
+            echo "No changes in PKGBUILD or .SRCINFO to commit."
+          else
+            git commit -m "chore: release v${PLAIN_VERSION}"
+            git push origin master
+            echo "Successfully pushed update to aur.archlinux.org/${AUR_PKG}.git"
+          fi

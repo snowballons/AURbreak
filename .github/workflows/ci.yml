@@ -90,7 +90,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies & ImageMagick
+      - name: Install system dependencies, ImageMagick & Xvfb
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -104,7 +104,8 @@ jobs:
             libwayland-dev \
             pkg-config \
             libssl-dev \
-            imagemagick
+            imagemagick \
+            xvfb
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -112,10 +113,10 @@ jobs:
       - name: Cache Cargo dependencies
         uses: swatinem/rust-cache@v2
 
-      - name: Generate headless snapshots using software renderer
+      - name: Generate headless snapshots using virtual framebuffer & software renderer
         run: |
           mkdir -p /tmp/ci-snapshots
-          SLINT_BACKEND=winit-software cargo run -- --snapshot /tmp/ci-snapshots
+          xvfb-run -a env SLINT_BACKEND=winit-software cargo run -- --snapshot /tmp/ci-snapshots
 
       - name: Verify generated snapshot files
         run: |
