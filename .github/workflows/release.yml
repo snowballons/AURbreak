@@ -55,6 +55,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libfontconfig1-dev \
             libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxkbcommon-x11-0 \
             libx11-dev \
             libxcursor-dev \
             libxrandr-dev \
@@ -137,7 +139,7 @@ jobs:
       - name: Install Arch build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm rust cargo git fontconfig libxkbcommon
+          pacman -S --noconfirm rust cargo git fontconfig libxkbcommon libxkbcommon-x11
 
       - name: Resolve Version
         id: vars
@@ -178,14 +180,15 @@ jobs:
           pkgbase = aurbreak
           pkgver = ${VERSION}-1
           pkgdesc = A fast, offline-first desktop browser for the Arch User Repository (AUR)
-          url = https://github.com/snowballons/browse-arch
+          url = https://github.com/snowballons/AURbreak
           builddate = $(date +%s)
-          packager = AURbreak CI <https://github.com/snowballons/browse-arch>
+          packager = AURbreak CI <https://github.com/snowballons/AURbreak>
           size = ${SIZE}
           arch = x86_64
           license = GPL-3.0-or-later
           depend = fontconfig
           depend = libxkbcommon
+          depend = libxkbcommon-x11
           depend = hicolor-icon-theme
           optdepend = yay: quick AUR package installation support
           optdepend = paru: alternative AUR helper support
@@ -234,6 +237,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libfontconfig1-dev \
             libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxkbcommon-x11-0 \
             libx11-dev \
             libxcursor-dev \
             libxrandr-dev \
@@ -484,7 +489,7 @@ jobs:
           arch=('x86_64')
           url="${REPO_URL}"
           license=('GPL-3.0-or-later')
-          depends=('fontconfig' 'libxkbcommon' 'hicolor-icon-theme')
+          depends=('fontconfig' 'libxkbcommon' 'libxkbcommon-x11' 'hicolor-icon-theme')
           optdepends=(
               'yay: quick AUR package installation support'
               'paru: alternative AUR helper support'

@@ -267,7 +267,7 @@ impl std::fmt::Display for FetchError {
 
 pub fn fetch_last_updated() -> Result<Vec<AurPackage>, FetchError> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent("browse-arch/0.1.0 (aur browser)")
+        .user_agent("aurbreak/0.1.0 (aur browser)")
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))?;

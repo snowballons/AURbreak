@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/snowballons/browse-arch/actions/workflows/ci.yml"><img src="https://github.com/snowballons/browse-arch/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
+  <a href="https://github.com/snowballons/AURbreak/actions/workflows/ci.yml"><img src="https://github.com/snowballons/AURbreak/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
   <a href="https://aur.archlinux.org/packages/aurbreak-bin"><img src="https://img.shields.io/aur/version/aurbreak-bin?color=1793d1&label=AUR" alt="AUR Package" /></a>
-  <a href="https://github.com/snowballons/browse-arch/releases"><img src="https://img.shields.io/github/v/release/snowballons/browse-arch?color=orange" alt="Latest Release" /></a>
+  <a href="https://github.com/snowballons/AURbreak/releases"><img src="https://img.shields.io/github/v/release/snowballons/AURbreak?color=orange" alt="Latest Release" /></a>
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL-3.0 License" /></a>
   <a href="https://slint.dev"><img src="https://img.shields.io/badge/GUI-Slint-27a7d8.svg" alt="Slint GUI" /></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Language-Rust-dea584.svg" alt="Rust" /></a>
@@ -72,7 +72,7 @@ It connects directly to the official AUR RPC v5 endpoints and RSS feeds, pairs h
 - **💻 Quick Terminal Helper Integration**:
   - One-click copyable terminal command for your preferred AUR helper (`yay -S <pkg>`, `paru -S <pkg>`, or `pikaur -S <pkg>`).
 - **💾 Offline-First Architecture**:
-  - Instant startup with persistent local caching under XDG data directory (`~/.local/share/browse-arch/cache.json`).
+  - Instant startup with persistent local caching under XDG data directory (`~/.local/share/aurbreak/cache.json`).
   - Automatic cache backup (`cache.json.bak`) with corruption self-healing.
 - **⚙️ Configurable Preferences**:
   - Customize preferred AUR helper, default search criteria, search result limits, and offline cache management.
@@ -108,7 +108,7 @@ makepkg -si
 
 ### 2. Arch Linux Pre-built Package (`.pkg.tar.zst`)
 
-Download the `.pkg.tar.zst` package from the [Releases](https://github.com/snowballons/browse-arch/releases) page:
+Download the `.pkg.tar.zst` package from the [Releases](https://github.com/snowballons/AURbreak/releases) page:
 
 ```bash
 sudo pacman -U aurbreak-<version>-1-x86_64.pkg.tar.zst
@@ -125,7 +125,7 @@ chmod +x AURbreak-<version>-x86_64.AppImage
 
 ### 4. Debian / Ubuntu (`.deb`)
 
-Download the `.deb` package from [Releases](https://github.com/snowballons/browse-arch/releases):
+Download the `.deb` package from [Releases](https://github.com/snowballons/AURbreak/releases):
 
 ```bash
 sudo dpkg -i aurbreak_<version>_amd64.deb
@@ -135,7 +135,7 @@ sudo apt-get install -f
 
 ### 5. Fedora / RHEL / openSUSE (`.rpm`)
 
-Download the `.rpm` package from [Releases](https://github.com/snowballons/browse-arch/releases):
+Download the `.rpm` package from [Releases](https://github.com/snowballons/AURbreak/releases):
 
 ```bash
 # Fedora / RHEL
@@ -187,8 +187,8 @@ sudo dnf install -y gcc gcc-c++ rust cargo fontconfig-devel libxkbcommon-devel o
 
 ```bash
 # Clone the repository
-git clone https://github.com/snowballons/browse-arch.git
-cd browse-arch
+git clone https://github.com/snowballons/AURbreak.git
+cd AURbreak
 
 # Run unit tests
 cargo test
@@ -219,9 +219,9 @@ AURbreak strictly follows the [XDG Base Directory Specification](https://specifi
 
 | File | Path | Description |
 |---|---|---|
-| **User Settings** | `~/.config/browse-arch/config.json` | Stores preferred AUR helper, search category, and limits. |
-| **Offline Cache** | `~/.local/share/browse-arch/cache.json` | Persists package feed data for instant startup and offline usage. |
-| **Cache Backup** | `~/.local/share/browse-arch/cache.json.bak` | Automatic backup file used for corruption recovery. |
+| **User Settings** | `~/.local/share/aurbreak/config.json` | Stores preferred AUR helper, search category, and limits. |
+| **Offline Cache** | `~/.local/share/aurbreak/cache.json` | Persists package feed data for instant startup and offline usage. |
+| **Cache Backup** | `~/.local/share/aurbreak/cache.json.bak` | Automatic backup file used for corruption recovery. |
 
 ---
 

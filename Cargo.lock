@@ -440,6 +440,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "aurbreak"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "directories",
+ "open",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "slint",
+ "slint-build",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,20 +570,6 @@ checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
 dependencies = [
  "bytes",
  "cfg_aliases",
-]
-
-[[package]]
-name = "browse-arch"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "directories",
- "open",
- "reqwest",
- "serde",
- "serde_json",
- "slint",
- "slint-build",
 ]
 
 [[package]]

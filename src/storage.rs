@@ -1,7 +1,7 @@
 //! Offline cache for the AUR "last updated" feed.
 //!
 //! Stored as a single JSON file under the XDG data dir
-//! (`~/.local/share/browse-arch/cache.json`).
+//! (`~/.local/share/aurbreak/cache.json`).
 //!
 //! Writes go through a temp file + rename so a crash mid-write can never
 //! leave a half-written file behind. A corrupt file is moved aside to
@@ -48,15 +48,34 @@ pub enum LoadOutcome {
 }
 
 fn project_dir() -> PathBuf {
-    directories::ProjectDirs::from("org", "aur", "browse-arch")
-        .map(|dirs| dirs.data_dir().to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    if let Some(dirs) = directories::ProjectDirs::from("org", "aur", "aurbreak") {
+        let new_dir = dirs.data_dir().to_path_buf();
+        // Seamless migration: if new aurbreak dir does not exist yet, check legacy browse-arch dir
+        if !new_dir.exists() {
+            if let Some(old_dirs) = directories::ProjectDirs::from("org", "aur", "browse-arch") {
+                let old_dir = old_dirs.data_dir().to_path_buf();
+                if old_dir.exists() {
+                    let _ = std::fs::create_dir_all(&new_dir);
+                    if let Ok(entries) = std::fs::read_dir(&old_dir) {
+                        for entry in entries.flatten() {
+                            let _ = std::fs::copy(entry.path(), new_dir.join(entry.file_name()));
+                        }
+                    }
+                }
+            }
+        }
+        new_dir
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    }
 }
 
 /// Resolve the cache file path. Tests can override the project dir via the
-/// `BROWSE_ARCH_TEST_DIR` env var so the real XDG data dir is never touched.
+/// `AURBREAK_TEST_DIR` or `BROWSE_ARCH_TEST_DIR` env vars.
 pub fn data_file() -> PathBuf {
-    if let Ok(dir) = std::env::var("BROWSE_ARCH_TEST_DIR") {
+    if let Ok(dir) =
+        std::env::var("AURBREAK_TEST_DIR").or_else(|_| std::env::var("BROWSE_ARCH_TEST_DIR"))
+    {
         let p = PathBuf::from(dir);
         ensure_parent(&p);
         return p.join("cache.json");
@@ -162,7 +181,9 @@ impl Default for AppConfig {
 
 /// Resolve the config file path.
 pub fn config_file() -> PathBuf {
-    if let Ok(dir) = std::env::var("BROWSE_ARCH_TEST_DIR") {
+    if let Ok(dir) =
+        std::env::var("AURBREAK_TEST_DIR").or_else(|_| std::env::var("BROWSE_ARCH_TEST_DIR"))
+    {
         let p = PathBuf::from(dir);
         ensure_parent(&p);
         return p.join("config.json");
@@ -238,7 +259,7 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("browse-arch-test-{}-{n}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aurbreak-test-{}-{n}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

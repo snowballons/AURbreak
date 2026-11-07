@@ -38,7 +38,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 
 - **UI Framework**: Slint ≥ 1.17 with custom `Theme` semantic design tokens for automatic Light/Dark mode switching based on OS theme.
 - **Backend & Network**: Rust with `reqwest` (rustls-tls) running exclusively on background worker threads, communicating with the UI thread via non-blocking `mpsc` channels and a 100ms timer poll loop.
-- **Offline Cache**: Single-file atomic JSON cache under XDG data dir (`~/.local/share/browse-arch/cache.json`) with `.bak` corruption recovery.
+- **Offline Cache**: Single-file atomic JSON cache under XDG data dir (`~/.local/share/aurbreak/cache.json`) with `.bak` corruption recovery.
 - **Data Source**: Official AUR RPC v5 endpoints (`https://aur.archlinux.org/rpc/v5/`) + official RSS modified/newest feeds.
 
 ---
@@ -147,7 +147,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
   - Dedicated `[ ⚙ Settings ]` header button next to Refresh with active state indicator.
   - Full-page responsive `SettingsView` with `[ ← Back to Packages ]` and <kbd>Esc</kbd> shortcut handler.
 - [x] **Configuration Persistence (`storage.rs`)**:
-  - Atomic JSON configuration persistence (`~/.local/share/browse-arch/config.json`).
+  - Atomic JSON configuration persistence (`~/.local/share/aurbreak/config.json`).
   - Unit tests for configuration roundtrip and recovery.
 - [x] **Appearance & Theme Switching**:
   - Real-time live switching between `System Default`, `Dark Theme`, and `Light Theme`.

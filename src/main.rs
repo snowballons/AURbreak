@@ -266,7 +266,7 @@ fn main() {
         let ui_settings = AppWindow::new().expect("Failed to create settings window");
         let state_settings = ui_settings.global::<AppState>();
         state_settings.set_show_settings(true);
-        state_settings.set_cache_path("/home/jonnie/.local/share/browse-arch/cache.json".into());
+        state_settings.set_cache_path("~/.local/share/aurbreak/cache.json".into());
         state_settings.set_cache_size_str("Cached file size: 142.5 KB".into());
         state_settings.set_aur_helper("yay".into());
         state_settings.set_default_search_by(1);
@@ -281,8 +281,7 @@ fn main() {
         ui_settings_dark.global::<Theme>().set_force_dark(true);
         let state_settings_dark = ui_settings_dark.global::<AppState>();
         state_settings_dark.set_show_settings(true);
-        state_settings_dark
-            .set_cache_path("/home/jonnie/.local/share/browse-arch/cache.json".into());
+        state_settings_dark.set_cache_path("~/.local/share/aurbreak/cache.json".into());
         state_settings_dark.set_cache_size_str("Cached file size: 142.5 KB".into());
         state_settings_dark.set_aur_helper("yay".into());
         state_settings_dark.set_default_search_by(1);
