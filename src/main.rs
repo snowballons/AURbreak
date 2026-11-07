@@ -667,7 +667,6 @@ fn main() {
                                     state.set_detail_out_of_date(
                                         detail
                                             .out_of_date
-                                            .and_then(|ts| ts.parse::<i64>().ok())
                                             .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
                                             .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
                                             .unwrap_or_default()

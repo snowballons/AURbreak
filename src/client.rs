@@ -18,6 +18,32 @@ pub struct AurPackage {
 
 // RPC v5 Types
 
+/// Custom deserializer for OutOfDate field.
+/// In AUR RPC v5, OutOfDate can be:
+/// - null or omitted when not flagged
+/// - integer UNIX timestamp (e.g. 1781786697)
+/// - string timestamp (e.g. "1781786697" or "5000", per OpenAPI type annotation)
+pub fn deserialize_out_of_date<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Number(n)) => Ok(n.as_i64()),
+        Some(serde_json::Value::String(s)) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                Ok(trimmed.parse::<i64>().ok())
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PackageBasic {
     #[serde(rename = "ID")]
@@ -40,8 +66,8 @@ pub struct PackageBasic {
     pub first_submitted: i64,
     #[serde(rename = "LastModified", default)]
     pub last_modified: i64,
-    #[serde(rename = "OutOfDate")]
-    pub out_of_date: Option<String>,
+    #[serde(rename = "OutOfDate", default, deserialize_with = "deserialize_out_of_date")]
+    pub out_of_date: Option<i64>,
     #[serde(rename = "Version", default)]
     pub version: String,
     #[serde(rename = "URLPath")]
@@ -56,7 +82,7 @@ pub struct PackageDetailed {
     #[serde(flatten)]
     pub basic: PackageBasic,
     #[serde(rename = "Submitter", default)]
-    pub submitter: String,
+    pub submitter: Option<String>,
     #[serde(rename = "License", default)]
     pub license: Vec<String>,
     #[serde(rename = "Depends", default)]
@@ -105,7 +131,7 @@ pub struct DetailPackage {
     pub submitter: String,
     pub first_submitted: i64,
     pub last_modified: i64,
-    pub out_of_date: Option<String>,
+    pub out_of_date: Option<i64>,
 }
 
 impl DetailPackage {
@@ -129,7 +155,7 @@ impl DetailPackage {
             groups: d.groups,
             keywords: d.keywords,
             co_maintainers: d.co_maintainers,
-            submitter: d.submitter,
+            submitter: d.submitter.unwrap_or_default(),
             first_submitted: d.basic.first_submitted,
             last_modified: d.basic.last_modified,
             out_of_date: d.basic.out_of_date,
@@ -600,8 +626,31 @@ mod tests {
         assert_eq!(result.results.len(), 2);
         assert_eq!(result.results[0].name, "pkg1");
         assert_eq!(result.results[1].name, "pkg2");
-        assert_eq!(result.results[1].out_of_date, Some("5000".to_string()));
+        assert_eq!(result.results[1].out_of_date, Some(5000));
         assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_out_of_date_field_variations() {
+        // Real AUR returns integer unix timestamp when flagged, or null when not flagged
+        let json_int = r#"{"ID":1,"Name":"p1","PackageBaseID":1,"PackageBase":"p1","OutOfDate":1781786697}"#;
+        let p_int: PackageBasic = serde_json::from_str(json_int).expect("deserialize int OutOfDate failed");
+        assert_eq!(p_int.out_of_date, Some(1781786697));
+
+        // OpenAPI spec annotated OutOfDate as string
+        let json_str = r#"{"ID":2,"Name":"p2","PackageBaseID":2,"PackageBase":"p2","OutOfDate":"1781786697"}"#;
+        let p_str: PackageBasic = serde_json::from_str(json_str).expect("deserialize str OutOfDate failed");
+        assert_eq!(p_str.out_of_date, Some(1781786697));
+
+        // Null OutOfDate
+        let json_null = r#"{"ID":3,"Name":"p3","PackageBaseID":3,"PackageBase":"p3","OutOfDate":null}"#;
+        let p_null: PackageBasic = serde_json::from_str(json_null).expect("deserialize null OutOfDate failed");
+        assert_eq!(p_null.out_of_date, None);
+
+        // Omitted OutOfDate
+        let json_missing = r#"{"ID":4,"Name":"p4","PackageBaseID":4,"PackageBase":"p4"}"#;
+        let p_missing: PackageBasic = serde_json::from_str(json_missing).expect("deserialize missing OutOfDate failed");
+        assert_eq!(p_missing.out_of_date, None);
     }
 
     #[test]
@@ -650,7 +699,7 @@ mod tests {
         assert_eq!(result.results.len(), 1);
         let pkg = &result.results[0];
         assert_eq!(pkg.basic.name, "detailed-pkg");
-        assert_eq!(pkg.submitter, "submitter");
+        assert_eq!(pkg.submitter.as_deref(), Some("submitter"));
         assert_eq!(pkg.license, vec!["GPL-3.0"]);
         assert_eq!(pkg.depends, vec!["dep1", "dep2"]);
         assert_eq!(pkg.make_depends, vec!["make1"]);
@@ -707,6 +756,12 @@ mod tests {
         }
         assert!(res.resultcount > 0);
         assert!(!res.results.is_empty());
+
+        // Test searching "telegram" which contains out-of-date packages returning integer timestamps
+        let res_tg = search_packages("telegram", Some(SearchBy::NameDesc)).expect("live search telegram failed");
+        assert!(res_tg.resultcount > 0);
+        let has_out_of_date = res_tg.results.iter().any(|p| p.out_of_date.is_some());
+        assert!(has_out_of_date, "Expected at least one out-of-date package in telegram search results");
     }
 
     #[test]
