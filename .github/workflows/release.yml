@@ -459,6 +459,11 @@ jobs:
           echo "Publishing ${AUR_PKG} v${PLAIN_VERSION} to aur.archlinux.org..."
           echo "Maintainer: ${AUR_USER} <${AUR_EMAIL}>"
 
+          # Configure git identity globally upfront (prevents permission/locking issues on .git/config)
+          git config --global user.name "${AUR_USER}"
+          git config --global user.email "${AUR_EMAIL}"
+          git config --global --add safe.directory "*"
+
           if [ "${AUR_PKG}" = "aurbreak" ]; then
             PROVIDES="('browse-arch')"
             CONFLICTS="('aurbreak-bin')"
@@ -510,25 +515,25 @@ jobs:
           }
           EOF
 
-          docker run --rm -v "$(pwd):/build" -w /build archlinux:base-devel bash -c "
+          # Stream PKGBUILD into Docker via stdin without mounting host volumes
+          # This keeps all host files and .git owned by the host runner
+          docker run --rm -i archlinux:base-devel bash -c "
             useradd -m builder
-            chown -R builder:builder /build
-            su builder -c 'makepkg --printsrcinfo' > /build/.SRCINFO
-          "
+            cat > /home/builder/PKGBUILD
+            chown builder:builder /home/builder/PKGBUILD
+            su builder -c 'cd /home/builder && makepkg --printsrcinfo'
+          " < PKGBUILD > .SRCINFO
 
           echo "=== PKGBUILD ==="
           cat PKGBUILD
           echo "=== .SRCINFO ==="
           cat .SRCINFO
 
-          git config user.name "${AUR_USER}"
-          git config user.email "${AUR_EMAIL}"
-
           git add PKGBUILD .SRCINFO
           if git diff --staged --quiet; then
             echo "No changes in PKGBUILD or .SRCINFO to commit."
           else
             git commit -m "chore: release v${PLAIN_VERSION}"
-            git push origin master
+            git push -u origin master
             echo "Successfully pushed update to aur.archlinux.org/${AUR_PKG}.git"
           fi
