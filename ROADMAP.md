@@ -1,4 +1,4 @@
-# Browse Arch — Project Roadmap & Architecture
+# AURbreak — Project Roadmap & Architecture
 
 A fast, offline-first desktop browser for the Arch User Repository (AUR), built with [Slint](https://slint.dev) and Rust.
 
@@ -6,13 +6,13 @@ A fast, offline-first desktop browser for the Arch User Repository (AUR), built 
 
 ## 1. Project Overview & Architecture
 
-Browse Arch provides a modern, responsive GUI for exploring, searching, and inspecting AUR packages. It connects to the official AUR RPC v5 API and RSS feeds, provides offline caching, and features a clean master-detail inspection experience.
+AURbreak provides a modern, responsive GUI for exploring, searching, and inspecting AUR packages. It connects to the official AUR RPC v5 API and RSS feeds, provides offline caching, and features a clean master-detail inspection experience.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Browse Arch (Slint UI)                                                 │
+│ AURbreak (Slint UI)                                                    │
 │                                                                        │
-│  [AUR] Browse Arch    [ ⚡ Last Modified | ✨ Newest | 🔍 Search AUR ]  [↻ Refresh]
+│  [Logo] AURbreak      [ ⚡ Last Modified | ✨ Newest | 🔍 Search AUR ]  [↻ Refresh]
 ├────────────────────────────────────────────────────────────────────────┤
 │  [ 🔍 Filter packages by name, description, maintainer... ] [100 pkgs] │
 ├──────────────────────────────────────┬─────────────────────────────────┤

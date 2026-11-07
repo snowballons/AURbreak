@@ -176,6 +176,7 @@ fn main() {
         state_detail.set_detail_name("telegram-a-appimage".into());
         state_detail.set_detail_version("10.9.48-1".into());
         state_detail.set_detail_description("Official Telegram Web client version A AppImage version. Provides a seamless desktop experience for Telegram Web A with native desktop notifications, media keys, and system tray integration.".into());
+        state_detail.set_detail_url("https://web.telegram.org/a/".into());
         state_detail.set_detail_maintainer("alesar1".into());
         state_detail.set_detail_submitter("alesar1".into());
         state_detail.set_detail_votes(18);
@@ -225,6 +226,7 @@ fn main() {
         state_detail_dark.set_detail_name("telegram-a-appimage".into());
         state_detail_dark.set_detail_version("10.9.48-1".into());
         state_detail_dark.set_detail_description("Official Telegram Web client version A AppImage version. Provides a seamless desktop experience for Telegram Web A with native desktop notifications, media keys, and system tray integration.".into());
+        state_detail_dark.set_detail_url("https://web.telegram.org/a/".into());
         state_detail_dark.set_detail_maintainer("alesar1".into());
         state_detail_dark.set_detail_submitter("alesar1".into());
         state_detail_dark.set_detail_votes(18);
@@ -338,6 +340,13 @@ fn main() {
         let _ = open::that(&url);
     });
 
+    ui.global::<AppLogic>().on_open_url(move |raw_url| {
+        let s = raw_url.to_string();
+        if !s.is_empty() {
+            let _ = open::that(&s);
+        }
+    });
+
     // Search callback
     let ui_weak = ui.as_weak();
     let tx_search = tx.clone();
@@ -428,6 +437,7 @@ fn main() {
             state.set_detail_submitter("".into());
             state.set_detail_votes(0);
             state.set_detail_popularity(0.0);
+            state.set_detail_url("".into());
             state.set_detail_license("".into());
             state.set_detail_depends(slint::ModelRc::new(VecModel::default()));
             state.set_detail_make_depends(slint::ModelRc::new(VecModel::default()));

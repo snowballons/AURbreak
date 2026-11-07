@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+  <title>AURbreak icon</title>
+  <path fill="#0E5C63" d="
+    M 48 412
+    C 92 404 88 330 88 270
+    A 168 168 0 0 1 424 270
+    C 424 336 380 384 304 380
+    C 340 362 346 320 346 270
+    A 90 90 0 0 0 166 270
+    C 166 330 150 392 120 412
+    Z"/>
+  <rect x="48" y="424" width="392" height="32" rx="16" fill="#7FD8C8"/>
+  <rect x="226" y="346" width="56" height="56" rx="10" fill="#D9622B" transform="rotate(-6 254 374)"/>
+</svg>

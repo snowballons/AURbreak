@@ -98,6 +98,7 @@ export global AppState {
 export global AppLogic {
     callback refresh-requested();
     callback open-pkg-page(string);
+    callback open-url(string);
     callback tab-changed(int);
 
     // Search callbacks
@@ -633,6 +634,79 @@ component PackageDetail inherits Rectangle {
                     }
                 }
 
+                // Upstream URL
+                Rectangle {
+                    background: Theme.section-bg;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        spacing: 8px;
+                        alignment: space-between;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            horizontal-stretch: 1;
+
+                            Text {
+                                text: "🌐";
+                                font-size: 13px;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: "Upstream URL:";
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: root.url != "" ? root.url : "(none specified)";
+                                font-size: 12px;
+                                font-weight: root.url != "" ? 600 : 400;
+                                color: root.url != "" ? Theme.text-accent : Theme.text-muted;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+
+                        if root.url != "": Rectangle {
+                            height: 24px;
+                            border-radius: 4px;
+                            background: upstream-touch.has-hover ? Theme.card-bg-hover : Theme.pill-bg;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            animate background { duration: 150ms; }
+
+                            upstream-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { AppLogic.open-url(root.url); }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                alignment: center;
+                                Text {
+                                    text: "Open ↗";
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    color: Theme.text-accent;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Out of date warning banner if applicable
                 if root.out-of-date != "": Rectangle {
                     background: Theme.warning-bg;
@@ -901,7 +975,8 @@ component PackageDetail inherits Rectangle {
 
 // Top Level Application Window
 export component AppWindow inherits Window {
-    title: "Browse Arch — Arch Linux AUR Package Browser";
+    title: "AURbreak — Arch Linux AUR Package Browser";
+    icon: @image-url("assets/aurbreak-icon-app.svg");
     preferred-width: 1080px;
     preferred-height: 720px;
     min-width: 800px;
@@ -937,26 +1012,15 @@ export component AppWindow inherits Window {
                 spacing: 16px;
                 alignment: space-between;
 
-                // App Brand / Logo
+                // App Brand / Logo with AURbreak icon
                 HorizontalLayout {
                     spacing: 10px;
                     alignment: start;
 
-                    // Arch AUR Badge
-                    Rectangle {
-                        width: 44px;
-                        height: 32px;
-                        border-radius: 6px;
-                        background: @linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-
-                        Text {
-                            text: "AUR";
-                            font-size: 12px;
-                            font-weight: 800;
-                            color: #ffffff;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    Image {
+                        source: @image-url("assets/aurbreak-icon-app.svg");
+                        width: 34px;
+                        height: 34px;
                     }
 
                     VerticalLayout {
@@ -964,8 +1028,8 @@ export component AppWindow inherits Window {
                         spacing: 1px;
 
                         Text {
-                            text: "Browse Arch";
-                            font-size: 17px;
+                            text: "AURbreak";
+                            font-size: 18px;
                             font-weight: 700;
                             color: Theme.text-primary;
                         }
