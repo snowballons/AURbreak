@@ -1,0 +1,366 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0). Leave empty to use git tag or Cargo.toml version.'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. Debian (.deb), RedHat/Fedora (.rpm), and Generic Portable (.tar.gz)
+  # --------------------------------------------------------------------------
+  build-tarball-deb-rpm:
+    name: Build Tarball, .deb & .rpm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          fi
+          # Strip leading 'v' for package formats that require strict semver
+          PLAIN_VERSION="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "PLAIN_VERSION=${PLAIN_VERSION}" >> $GITHUB_OUTPUT
+          echo "Building release for version ${VERSION} (${PLAIN_VERSION})"
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libfontconfig1-dev \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libwayland-dev \
+            pkg-config \
+            libssl-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Strip release binary
+        run: strip target/release/aurbreak
+
+      - name: Package generic portable tarball (.tar.gz)
+        run: |
+          PKG_DIR="aurbreak-${{ steps.vars.outputs.VERSION }}-x86_64-unknown-linux-gnu"
+          mkdir -p "${PKG_DIR}/packaging"
+          mkdir -p "${PKG_DIR}/ui/assets"
+
+          cp target/release/aurbreak "${PKG_DIR}/"
+          cp packaging/aurbreak.desktop "${PKG_DIR}/packaging/"
+          cp packaging/install.sh "${PKG_DIR}/"
+          cp ui/assets/aurbreak-icon-app.svg "${PKG_DIR}/ui/assets/"
+          cp LICENSE "${PKG_DIR}/"
+          cp ROADMAP.md "${PKG_DIR}/README.md"
+
+          tar -czvf "${PKG_DIR}.tar.gz" "${PKG_DIR}"
+          mkdir -p dist
+          mv "${PKG_DIR}.tar.gz" dist/
+
+      - name: Install cargo-deb and cargo-generate-rpm
+        run: |
+          # Fetch prebuilt cargo-deb binary to save ~5 minutes of CI build time
+          CARGO_DEB_VER="2.11.1"
+          curl -Ls "https://github.com/kornelski/cargo-deb/releases/download/v${CARGO_DEB_VER}/cargo-deb_${CARGO_DEB_VER}_amd64.deb" -o /tmp/cargo-deb.deb
+          sudo dpkg -i /tmp/cargo-deb.deb || cargo install cargo-deb --locked
+
+          # Fetch cargo-generate-rpm
+          cargo install cargo-generate-rpm --locked
+
+      - name: Build Debian package (.deb)
+        run: |
+          cargo deb --no-build
+          DEB_FILE=$(ls target/debian/*.deb | head -n 1)
+          cp "${DEB_FILE}" "dist/aurbreak_${{ steps.vars.outputs.PLAIN_VERSION }}_amd64.deb"
+
+      - name: Build Fedora / RHEL package (.rpm)
+        run: |
+          cargo generate-rpm
+          RPM_FILE=$(ls target/generate-rpm/*.rpm | head -n 1)
+          cp "${RPM_FILE}" "dist/aurbreak-${{ steps.vars.outputs.PLAIN_VERSION }}-1.x86_64.rpm"
+
+      - name: Upload Debian, RPM and Tarball artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-tar-deb-rpm
+          path: dist/*
+          if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # 2. Arch Linux Package (.pkg.tar.zst)
+  # --------------------------------------------------------------------------
+  build-arch:
+    name: Build Arch Linux Package (.pkg.tar.zst)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Arch build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm rust cargo git fontconfig libxkbcommon
+
+      - name: Resolve Version
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          fi
+          PLAIN_VERSION="${VERSION#v}"
+          echo "PLAIN_VERSION=${PLAIN_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Assemble Arch Linux package structure
+        run: |
+          VERSION="${{ steps.vars.outputs.PLAIN_VERSION }}"
+          PKGDIR="pkg"
+          mkdir -p "${PKGDIR}/usr/bin"
+          mkdir -p "${PKGDIR}/usr/share/applications"
+          mkdir -p "${PKGDIR}/usr/share/icons/hicolor/scalable/apps"
+          mkdir -p "${PKGDIR}/usr/share/licenses/aurbreak"
+
+          strip target/release/aurbreak
+          install -Dm755 target/release/aurbreak "${PKGDIR}/usr/bin/aurbreak"
+          ln -sf aurbreak "${PKGDIR}/usr/bin/browse-arch"
+          install -Dm644 packaging/aurbreak.desktop "${PKGDIR}/usr/share/applications/aurbreak.desktop"
+          install -Dm644 ui/assets/aurbreak-icon-app.svg "${PKGDIR}/usr/share/icons/hicolor/scalable/apps/aurbreak.svg"
+          install -Dm644 LICENSE "${PKGDIR}/usr/share/licenses/aurbreak/LICENSE"
+
+          # Generate .PKGINFO metadata
+          SIZE=$(du -sb "${PKGDIR}" | awk '{print $1}')
+          cat <<EOF > "${PKGDIR}/.PKGINFO"
+          pkgname = aurbreak
+          pkgbase = aurbreak
+          pkgver = ${VERSION}-1
+          pkgdesc = A fast, offline-first desktop browser for the Arch User Repository (AUR)
+          url = https://github.com/snowballons/browse-arch
+          builddate = $(date +%s)
+          packager = AURbreak CI <https://github.com/snowballons/browse-arch>
+          size = ${SIZE}
+          arch = x86_64
+          license = GPL-3.0-or-later
+          depend = fontconfig
+          depend = libxkbcommon
+          depend = hicolor-icon-theme
+          optdepend = yay: quick AUR package installation support
+          optdepend = paru: alternative AUR helper support
+          optdepend = pikaur: alternative AUR helper support
+          provides = aurbreak
+          provides = browse-arch
+          EOF
+
+          # Compress to standard Arch Linux zstandard package format
+          mkdir -p dist
+          tar --zstd -cf "dist/aurbreak-${VERSION}-1-x86_64.pkg.tar.zst" -C "${PKGDIR}" .
+
+      - name: Upload Arch Linux package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-arch
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # 3. Universal AppImage (.AppImage)
+  # --------------------------------------------------------------------------
+  build-appimage:
+    name: Build Universal AppImage
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "PLAIN_VERSION=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libfontconfig1-dev \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libwayland-dev \
+            pkg-config \
+            libssl-dev \
+            file \
+            libfuse2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Assemble AppDir
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
+
+          strip target/release/aurbreak
+          cp target/release/aurbreak AppDir/usr/bin/aurbreak
+          ln -sf aurbreak AppDir/usr/bin/browse-arch
+
+          cp packaging/aurbreak.desktop AppDir/usr/share/applications/aurbreak.desktop
+          cp packaging/aurbreak.desktop AppDir/aurbreak.desktop
+
+          cp ui/assets/aurbreak-icon-app.svg AppDir/usr/share/icons/hicolor/scalable/apps/aurbreak.svg
+          cp ui/assets/aurbreak-icon-app.svg AppDir/aurbreak.svg
+          cp ui/assets/aurbreak-icon-app.svg AppDir/.DirIcon
+
+          # Create AppRun entrypoint script
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/aurbreak" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+      - name: Download appimagetool and generate AppImage
+        run: |
+          curl -sLo /tmp/appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x /tmp/appimagetool
+
+          # Extract appimagetool to avoid FUSE issues inside Docker/CI runners
+          cd /tmp && ./appimagetool --appimage-extract && cd -
+
+          mkdir -p dist
+          /tmp/squashfs-root/AppRun AppDir "dist/AURbreak-${{ steps.vars.outputs.VERSION }}-x86_64.AppImage"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # 4. Release Publisher (Consolidates all artifacts, signs checksums & publishes)
+  # --------------------------------------------------------------------------
+  publish:
+    name: Publish GitHub Release
+    needs: [build-tarball-deb-rpm, build-arch, build-appimage]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create release directory
+        run: mkdir -p release_assets
+
+      - name: Download Tarball, .deb and .rpm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-tar-deb-rpm
+          path: release_assets/
+
+      - name: Download Arch package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-arch
+          path: release_assets/
+
+      - name: Download AppImage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-appimage
+          path: release_assets/
+
+      - name: Generate SHA256 Checksums
+        run: |
+          cd release_assets
+          sha256sum * > SHA256SUMS.txt
+          echo "=== Release Assets & Checksums ==="
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.version != ''
+        with:
+          tag_name: ${{ steps.vars.outputs.VERSION }}
+          name: "AURbreak ${{ steps.vars.outputs.VERSION }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release_assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

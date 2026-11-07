@@ -66,7 +66,11 @@ pub struct PackageBasic {
     pub first_submitted: i64,
     #[serde(rename = "LastModified", default)]
     pub last_modified: i64,
-    #[serde(rename = "OutOfDate", default, deserialize_with = "deserialize_out_of_date")]
+    #[serde(
+        rename = "OutOfDate",
+        default,
+        deserialize_with = "deserialize_out_of_date"
+    )]
     pub out_of_date: Option<i64>,
     #[serde(rename = "Version", default)]
     pub version: String,
@@ -184,10 +188,11 @@ pub struct InfoResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 pub enum SearchBy {
     Name,
     #[serde(rename = "name-desc")]
+    #[default]
     NameDesc,
     Depends,
     CheckDepends,
@@ -195,12 +200,6 @@ pub enum SearchBy {
     MakeDepends,
     Maintainer,
     Submitter,
-}
-
-impl Default for SearchBy {
-    fn default() -> Self {
-        SearchBy::NameDesc
-    }
 }
 
 impl SearchBy {
@@ -278,7 +277,9 @@ pub fn fetch_last_updated() -> Result<Vec<AurPackage>, FetchError> {
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let xml = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
+    let xml = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
     let rss_items = parse_rss(&xml)?;
 
     Ok(rss_items
@@ -314,7 +315,9 @@ pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let xml = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
+    let xml = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
     parse_rss(&xml)
 }
 
@@ -331,7 +334,9 @@ fn aur_client() -> Result<reqwest::blocking::Client, FetchError> {
 /// `arg` is the search query. `by` defaults to NameDesc if None.
 pub fn search_packages(arg: &str, by: Option<SearchBy>) -> Result<SearchResult, FetchError> {
     let client = aur_client()?;
-    let by_str = by.map(|b| b.as_str()).unwrap_or(SearchBy::NameDesc.as_str());
+    let by_str = by
+        .map(|b| b.as_str())
+        .unwrap_or(SearchBy::NameDesc.as_str());
 
     let resp = client
         .get("https://aur.archlinux.org/rpc/v5/search")
@@ -339,7 +344,9 @@ pub fn search_packages(arg: &str, by: Option<SearchBy>) -> Result<SearchResult, 
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let json = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
+    let json = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
     serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))
 }
 
@@ -349,12 +356,15 @@ pub fn get_package_info(name: &str) -> Result<PackageDetailed, FetchError> {
     let client = aur_client()?;
 
     let resp = client
-        .get(&format!("https://aur.archlinux.org/rpc/v5/info/{}", name))
+        .get(format!("https://aur.archlinux.org/rpc/v5/info/{}", name))
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let json = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
-    let result: InfoResult = serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))?;
+    let json = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
+    let result: InfoResult =
+        serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))?;
 
     result
         .results
@@ -383,8 +393,11 @@ pub fn get_multi_info(names: &[&str]) -> Result<Vec<PackageDetailed>, FetchError
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let json = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
-    let result: InfoResult = serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))?;
+    let json = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
+    let result: InfoResult =
+        serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))?;
 
     Ok(result.results)
 }
@@ -394,11 +407,16 @@ pub fn suggest_packages(prefix: &str) -> Result<Vec<String>, FetchError> {
     let client = aur_client()?;
 
     let resp = client
-        .get(&format!("https://aur.archlinux.org/rpc/v5/suggest/{}", prefix))
+        .get(format!(
+            "https://aur.archlinux.org/rpc/v5/suggest/{}",
+            prefix
+        ))
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let json = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
+    let json = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
     serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))
 }
 
@@ -408,11 +426,16 @@ pub fn suggest_pkgbases(prefix: &str) -> Result<Vec<String>, FetchError> {
     let client = aur_client()?;
 
     let resp = client
-        .get(&format!("https://aur.archlinux.org/rpc/v5/suggest-pkgbase/{}", prefix))
+        .get(format!(
+            "https://aur.archlinux.org/rpc/v5/suggest-pkgbase/{}",
+            prefix
+        ))
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
 
-    let json = resp.text().map_err(|e| FetchError::Network(e.to_string()))?;
+    let json = resp
+        .text()
+        .map_err(|e| FetchError::Network(e.to_string()))?;
     serde_json::from_str(&json).map_err(|e| FetchError::Network(e.to_string()))
 }
 
@@ -471,7 +494,10 @@ mod tests {
         let items = parse_rss(sample_rss).expect("rss parse failed");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].name, "aerial-lock-git");
-        assert_eq!(items[0].link, "http://aur.archlinux.org/packages/aerial-lock-git");
+        assert_eq!(
+            items[0].link,
+            "http://aur.archlinux.org/packages/aerial-lock-git"
+        );
         assert_eq!(items[0].description, "Wayland session locker");
     }
 
@@ -633,23 +659,30 @@ mod tests {
     #[test]
     fn test_out_of_date_field_variations() {
         // Real AUR returns integer unix timestamp when flagged, or null when not flagged
-        let json_int = r#"{"ID":1,"Name":"p1","PackageBaseID":1,"PackageBase":"p1","OutOfDate":1781786697}"#;
-        let p_int: PackageBasic = serde_json::from_str(json_int).expect("deserialize int OutOfDate failed");
+        let json_int =
+            r#"{"ID":1,"Name":"p1","PackageBaseID":1,"PackageBase":"p1","OutOfDate":1781786697}"#;
+        let p_int: PackageBasic =
+            serde_json::from_str(json_int).expect("deserialize int OutOfDate failed");
         assert_eq!(p_int.out_of_date, Some(1781786697));
 
         // OpenAPI spec annotated OutOfDate as string
-        let json_str = r#"{"ID":2,"Name":"p2","PackageBaseID":2,"PackageBase":"p2","OutOfDate":"1781786697"}"#;
-        let p_str: PackageBasic = serde_json::from_str(json_str).expect("deserialize str OutOfDate failed");
+        let json_str =
+            r#"{"ID":2,"Name":"p2","PackageBaseID":2,"PackageBase":"p2","OutOfDate":"1781786697"}"#;
+        let p_str: PackageBasic =
+            serde_json::from_str(json_str).expect("deserialize str OutOfDate failed");
         assert_eq!(p_str.out_of_date, Some(1781786697));
 
         // Null OutOfDate
-        let json_null = r#"{"ID":3,"Name":"p3","PackageBaseID":3,"PackageBase":"p3","OutOfDate":null}"#;
-        let p_null: PackageBasic = serde_json::from_str(json_null).expect("deserialize null OutOfDate failed");
+        let json_null =
+            r#"{"ID":3,"Name":"p3","PackageBaseID":3,"PackageBase":"p3","OutOfDate":null}"#;
+        let p_null: PackageBasic =
+            serde_json::from_str(json_null).expect("deserialize null OutOfDate failed");
         assert_eq!(p_null.out_of_date, None);
 
         // Omitted OutOfDate
         let json_missing = r#"{"ID":4,"Name":"p4","PackageBaseID":4,"PackageBase":"p4"}"#;
-        let p_missing: PackageBasic = serde_json::from_str(json_missing).expect("deserialize missing OutOfDate failed");
+        let p_missing: PackageBasic =
+            serde_json::from_str(json_missing).expect("deserialize missing OutOfDate failed");
         assert_eq!(p_missing.out_of_date, None);
     }
 
@@ -752,16 +785,23 @@ mod tests {
         let res = search_packages("yay", Some(SearchBy::NameDesc)).expect("live search failed");
         println!("count={}", res.resultcount);
         for p in res.results.iter().take(3) {
-            println!("{} | {} | votes={} pop={:.2}", p.name, p.version, p.num_votes, p.popularity);
+            println!(
+                "{} | {} | votes={} pop={:.2}",
+                p.name, p.version, p.num_votes, p.popularity
+            );
         }
         assert!(res.resultcount > 0);
         assert!(!res.results.is_empty());
 
         // Test searching "telegram" which contains out-of-date packages returning integer timestamps
-        let res_tg = search_packages("telegram", Some(SearchBy::NameDesc)).expect("live search telegram failed");
+        let res_tg = search_packages("telegram", Some(SearchBy::NameDesc))
+            .expect("live search telegram failed");
         assert!(res_tg.resultcount > 0);
         let has_out_of_date = res_tg.results.iter().any(|p| p.out_of_date.is_some());
-        assert!(has_out_of_date, "Expected at least one out-of-date package in telegram search results");
+        assert!(
+            has_out_of_date,
+            "Expected at least one out-of-date package in telegram search results"
+        );
     }
 
     #[test]

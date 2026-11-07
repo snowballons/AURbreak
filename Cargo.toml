@@ -2,6 +2,40 @@
 name = "browse-arch"
 version = "0.1.0"
 edition = "2021"
+description = "A fast, offline-first desktop browser for the Arch User Repository (AUR)"
+authors = ["AURbreak Developers"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/snowballons/browse-arch"
+
+[[bin]]
+name = "aurbreak"
+path = "src/main.rs"
+
+[package.metadata.deb]
+name = "aurbreak"
+maintainer = "AURbreak Developers"
+copyright = "2026 AURbreak"
+license-file = ["LICENSE", "4"]
+extended-description = """\
+AURbreak is a fast, offline-first desktop browser for the Arch User Repository (AUR), \
+built with Slint and Rust."""
+depends = "$auto, libfontconfig1, libxkbcommon0"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/aurbreak", "usr/bin/aurbreak", "755"],
+    ["packaging/aurbreak.desktop", "usr/share/applications/aurbreak.desktop", "644"],
+    ["ui/assets/aurbreak-icon-app.svg", "usr/share/icons/hicolor/scalable/apps/aurbreak.svg", "644"],
+    ["LICENSE", "usr/share/doc/aurbreak/copyright", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/aurbreak", dest = "/usr/bin/aurbreak", mode = "755" },
+    { source = "packaging/aurbreak.desktop", dest = "/usr/share/applications/aurbreak.desktop", mode = "644" },
+    { source = "ui/assets/aurbreak-icon-app.svg", dest = "/usr/share/icons/hicolor/scalable/apps/aurbreak.svg", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/doc/aurbreak/LICENSE", mode = "644" },
+]
 
 [dependencies]
 slint = "1.17"

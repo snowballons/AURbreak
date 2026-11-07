@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=AURbreak
+GenericName=Arch User Repository Browser
+Comment=A fast, offline-first desktop browser for the Arch User Repository (AUR)
+Exec=aurbreak %u
+Icon=aurbreak
+Terminal=false
+Categories=System;Utility;PackageManager;
+Keywords=arch;aur;package;browser;pacman;yay;paru;
+StartupNotify=true
+StartupWMClass=aurbreak

@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 
+#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
 enum BackgroundMsg {
     LastUpdatedFetched(Result<Vec<AurPackage>, String>),
     RssFetched(Result<Vec<RssPackage>, String>),
@@ -72,7 +73,9 @@ fn main() {
 
     // Headless snapshot mode for visual verification & screenshots
     if let Some(_target) = std::env::args().nth(1).filter(|a| a == "--snapshot") {
-        let out_dir = std::env::args().nth(2).unwrap_or_else(|| "/tmp".to_string());
+        let out_dir = std::env::args()
+            .nth(2)
+            .unwrap_or_else(|| "/tmp".to_string());
         println!("Generating snapshots in {out_dir}...");
 
         let mock_pkgs = vec![
@@ -81,7 +84,8 @@ fn main() {
                 version: "1.96.2-1".to_string(),
                 votes: 2450,
                 popularity: 42.15,
-                description: "Visual Studio Code. Code editing. Redefined. Official binary package".to_string(),
+                description: "Visual Studio Code. Code editing. Redefined. Official binary package"
+                    .to_string(),
                 maintainer: "dpeukert".to_string(),
                 updated_str: "2026-11-06 18:24 (UTC)".to_string(),
                 updated_utc: None,
@@ -91,7 +95,8 @@ fn main() {
                 version: "12.4.2-1".to_string(),
                 votes: 4120,
                 popularity: 68.30,
-                description: "Yet another yogurt. Pacman wrapper and AUR helper written in Go".to_string(),
+                description: "Yet another yogurt. Pacman wrapper and AUR helper written in Go"
+                    .to_string(),
                 maintainer: "Morganamilo".to_string(),
                 updated_str: "2026-11-05 14:10 (UTC)".to_string(),
                 updated_utc: None,
@@ -111,7 +116,8 @@ fn main() {
                 version: "131.0.6778.85-1".to_string(),
                 votes: 3120,
                 popularity: 38.90,
-                description: "The popular and trusted web browser by Google (stable channel)".to_string(),
+                description: "The popular and trusted web browser by Google (stable channel)"
+                    .to_string(),
                 maintainer: "antonio".to_string(),
                 updated_str: "2026-11-03 22:05 (UTC)".to_string(),
                 updated_utc: None,
@@ -121,7 +127,8 @@ fn main() {
                 version: "2026-11-04-1".to_string(),
                 votes: 820,
                 popularity: 14.50,
-                description: "A modular compiler frontend for the Rust language (binary release)".to_string(),
+                description: "A modular compiler frontend for the Rust language (binary release)"
+                    .to_string(),
                 maintainer: "orhun".to_string(),
                 updated_str: "2026-11-04 11:30 (UTC)".to_string(),
                 updated_utc: None,
@@ -207,7 +214,10 @@ fn main() {
         state_dark.set_last_fetched_str("just now".into());
         state_dark.set_status_text("Loaded 5 packages • Ready".into());
         apply_filter(&ui_dark, &mock_pkgs, "");
-        if let Err(e) = save_snapshot(&ui_dark, &format!("{out_dir}/aur-view-last-modified-dark.png")) {
+        if let Err(e) = save_snapshot(
+            &ui_dark,
+            &format!("{out_dir}/aur-view-last-modified-dark.png"),
+        ) {
             eprintln!("Failed to save dark snapshot: {e}");
         }
 
@@ -239,13 +249,16 @@ fn main() {
             "glibc".into(),
             "fuse2".into(),
         ])));
-        state_detail_dark.set_detail_make_depends(slint::ModelRc::new(slint::VecModel::from(vec![
-            "squashfs-tools".into(),
-        ])));
+        state_detail_dark.set_detail_make_depends(slint::ModelRc::new(slint::VecModel::from(
+            vec!["squashfs-tools".into()],
+        )));
         state_detail_dark.set_detail_opt_depends(slint::ModelRc::new(slint::VecModel::from(vec![
             "libnotify: Desktop notifications support".into(),
         ])));
-        if let Err(e) = save_snapshot(&ui_detail_dark, &format!("{out_dir}/aur-view-detail-dark.png")) {
+        if let Err(e) = save_snapshot(
+            &ui_detail_dark,
+            &format!("{out_dir}/aur-view-detail-dark.png"),
+        ) {
             eprintln!("Failed to save dark detail snapshot: {e}");
         }
 
@@ -268,13 +281,17 @@ fn main() {
         ui_settings_dark.global::<Theme>().set_force_dark(true);
         let state_settings_dark = ui_settings_dark.global::<AppState>();
         state_settings_dark.set_show_settings(true);
-        state_settings_dark.set_cache_path("/home/jonnie/.local/share/browse-arch/cache.json".into());
+        state_settings_dark
+            .set_cache_path("/home/jonnie/.local/share/browse-arch/cache.json".into());
         state_settings_dark.set_cache_size_str("Cached file size: 142.5 KB".into());
         state_settings_dark.set_aur_helper("yay".into());
         state_settings_dark.set_default_search_by(1);
         state_settings_dark.set_search_page_size(50);
         state_settings_dark.set_theme_mode(1);
-        if let Err(e) = save_snapshot(&ui_settings_dark, &format!("{out_dir}/aur-view-settings-dark.png")) {
+        if let Err(e) = save_snapshot(
+            &ui_settings_dark,
+            &format!("{out_dir}/aur-view-settings-dark.png"),
+        ) {
             eprintln!("Failed to save dark settings snapshot: {e}");
         }
 
@@ -344,11 +361,15 @@ fn main() {
                 let query = state.get_search_query().to_string();
                 if !query.is_empty() {
                     let search_by_idx = state.get_search_by() as usize;
-                    let by = SearchBy::all().get(search_by_idx).copied().unwrap_or(SearchBy::NameDesc);
+                    let by = SearchBy::all()
+                        .get(search_by_idx)
+                        .copied()
+                        .unwrap_or(SearchBy::NameDesc);
                     state.set_search_loading(true);
                     let tx = tx_refresh.clone();
                     thread::spawn(move || {
-                        let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                        let res =
+                            client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
                         let _ = tx.send(BackgroundMsg::SearchFetched(res));
                     });
                 }
@@ -425,31 +446,36 @@ fn main() {
         }
     });
 
-    ui.global::<AppLogic>().on_aur_helper_changed(move |helper| {
-        let mut cfg = storage::load_config();
-        cfg.aur_helper = helper.to_string();
-        storage::save_config(&cfg);
-    });
+    ui.global::<AppLogic>()
+        .on_aur_helper_changed(move |helper| {
+            let mut cfg = storage::load_config();
+            cfg.aur_helper = helper.to_string();
+            storage::save_config(&cfg);
+        });
 
-    ui.global::<AppLogic>().on_default_search_by_changed(move |by| {
-        let mut cfg = storage::load_config();
-        cfg.default_search_by = by;
-        storage::save_config(&cfg);
-    });
+    ui.global::<AppLogic>()
+        .on_default_search_by_changed(move |by| {
+            let mut cfg = storage::load_config();
+            cfg.default_search_by = by;
+            storage::save_config(&cfg);
+        });
 
     let ui_weak = ui.as_weak();
-    ui.global::<AppLogic>().on_search_page_size_changed(move |size| {
-        if let Some(app) = ui_weak.upgrade() {
-            let state = app.global::<AppState>();
-            let count = state.get_search_result_count();
-            if count > 0 && size > 0 {
-                state.set_search_total_pages(((count as f64) / (size as f64)).ceil().max(1.0) as i32);
+    ui.global::<AppLogic>()
+        .on_search_page_size_changed(move |size| {
+            if let Some(app) = ui_weak.upgrade() {
+                let state = app.global::<AppState>();
+                let count = state.get_search_result_count();
+                if count > 0 && size > 0 {
+                    state.set_search_total_pages(
+                        ((count as f64) / (size as f64)).ceil().max(1.0) as i32
+                    );
+                }
+                let mut cfg = storage::load_config();
+                cfg.search_page_size = size;
+                storage::save_config(&cfg);
             }
-            let mut cfg = storage::load_config();
-            cfg.search_page_size = size;
-            storage::save_config(&cfg);
-        }
-    });
+        });
 
     let ui_weak = ui.as_weak();
     ui.global::<AppLogic>().on_clear_cache_requested(move || {
@@ -466,21 +492,25 @@ fn main() {
     // Search callback
     let ui_weak = ui.as_weak();
     let tx_search = tx.clone();
-    ui.global::<AppLogic>().on_search_requested(move |query, by, _page| {
-        if let Some(app) = ui_weak.upgrade() {
-            let state = app.global::<AppState>();
-            state.set_search_loading(true);
-            state.set_status_text(format!("Searching for \"{}\"…", query).into());
+    ui.global::<AppLogic>()
+        .on_search_requested(move |query, by, _page| {
+            if let Some(app) = ui_weak.upgrade() {
+                let state = app.global::<AppState>();
+                state.set_search_loading(true);
+                state.set_status_text(format!("Searching for \"{}\"…", query).into());
 
-            let tx = tx_search.clone();
-            let query = query.to_string();
-            let by = SearchBy::all().get(by as usize).copied().unwrap_or(SearchBy::NameDesc);
-            thread::spawn(move || {
-                let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
-                let _ = tx.send(BackgroundMsg::SearchFetched(res));
-            });
-        }
-    });
+                let tx = tx_search.clone();
+                let query = query.to_string();
+                let by = SearchBy::all()
+                    .get(by as usize)
+                    .copied()
+                    .unwrap_or(SearchBy::NameDesc);
+                thread::spawn(move || {
+                    let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                    let _ = tx.send(BackgroundMsg::SearchFetched(res));
+                });
+            }
+        });
 
     // Suggest callback for autocomplete
     let ui_weak = ui.as_weak();
@@ -502,22 +532,26 @@ fn main() {
     // Search page change callback
     let ui_weak = ui.as_weak();
     let tx_page = tx.clone();
-    ui.global::<AppLogic>().on_search_page_changed(move |_page| {
-        if let Some(app) = ui_weak.upgrade() {
-            let state = app.global::<AppState>();
-            let query = state.get_search_query().to_string();
-            if query.is_empty() {
-                return;
+    ui.global::<AppLogic>()
+        .on_search_page_changed(move |_page| {
+            if let Some(app) = ui_weak.upgrade() {
+                let state = app.global::<AppState>();
+                let query = state.get_search_query().to_string();
+                if query.is_empty() {
+                    return;
+                }
+                let by = SearchBy::all()
+                    .get(state.get_search_by() as usize)
+                    .copied()
+                    .unwrap_or(SearchBy::NameDesc);
+                state.set_search_loading(true);
+                let tx = tx_page.clone();
+                thread::spawn(move || {
+                    let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                    let _ = tx.send(BackgroundMsg::SearchFetched(res));
+                });
             }
-            let by = SearchBy::all().get(state.get_search_by() as usize).copied().unwrap_or(SearchBy::NameDesc);
-            state.set_search_loading(true);
-            let tx = tx_page.clone();
-            thread::spawn(move || {
-                let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
-                let _ = tx.send(BackgroundMsg::SearchFetched(res));
-            });
-        }
-    });
+        });
 
     // Search by changed callback
     let ui_weak = ui.as_weak();
@@ -529,7 +563,10 @@ fn main() {
             if query.is_empty() {
                 return;
             }
-            let by = SearchBy::all().get(by as usize).copied().unwrap_or(SearchBy::NameDesc);
+            let by = SearchBy::all()
+                .get(by as usize)
+                .copied()
+                .unwrap_or(SearchBy::NameDesc);
             state.set_search_loading(true);
             let tx = tx_by.clone();
             thread::spawn(move || {
@@ -613,7 +650,8 @@ fn main() {
                                     apply_filter(&app, &pkgs, &filter);
                                     state.set_last_fetched_str("just now".into());
                                     state.set_status_text(
-                                        format!("Fetched {} packages successfully.", pkgs.len()).into(),
+                                        format!("Fetched {} packages successfully.", pkgs.len())
+                                            .into(),
                                     );
                                 }
                                 Err(err) => {
@@ -645,11 +683,14 @@ fn main() {
                                     apply_filter(&app, &aur_pkgs, &filter);
                                     state.set_last_fetched_str("just now".into());
                                     state.set_status_text(
-                                        format!("Fetched {} RSS submission items.", aur_pkgs.len()).into(),
+                                        format!("Fetched {} RSS submission items.", aur_pkgs.len())
+                                            .into(),
                                     );
                                 }
                                 Err(err) => {
-                                    state.set_status_text(format!("RSS fetch failed: {}", err).into());
+                                    state.set_status_text(
+                                        format!("RSS fetch failed: {}", err).into(),
+                                    );
                                 }
                             }
                         }
@@ -670,11 +711,21 @@ fn main() {
                                             description: p.description.unwrap_or_default(),
                                             maintainer: p.maintainer.unwrap_or_default(),
                                             updated_str: {
-                                                let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(p.last_modified, 0);
-                                                dt.map(|d| d.format("%Y-%m-%d %H:%M (UTC)").to_string())
-                                                    .unwrap_or_default()
+                                                let dt =
+                                                    chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                                        p.last_modified,
+                                                        0,
+                                                    );
+                                                dt.map(|d| {
+                                                    d.format("%Y-%m-%d %H:%M (UTC)").to_string()
+                                                })
+                                                .unwrap_or_default()
                                             },
-                                            updated_utc: chrono::DateTime::<chrono::Utc>::from_timestamp(p.last_modified, 0),
+                                            updated_utc:
+                                                chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                                    p.last_modified,
+                                                    0,
+                                                ),
                                         })
                                         .collect();
 
@@ -684,11 +735,15 @@ fn main() {
                                     state.set_search_result_count(search_result.resultcount);
                                     let page_size = state.get_search_page_size().max(10);
                                     state.set_search_total_pages(
-                                        ((search_result.resultcount as f64) / (page_size as f64)).ceil().max(1.0) as i32,
+                                        ((search_result.resultcount as f64) / (page_size as f64))
+                                            .ceil()
+                                            .max(1.0)
+                                            as i32,
                                     );
                                     state.set_last_fetched_str("just now".into());
                                     state.set_status_text(
-                                        format!("Found {} packages.", search_result.resultcount).into(),
+                                        format!("Found {} packages.", search_result.resultcount)
+                                            .into(),
                                     );
                                 }
                                 Err(err) => {
@@ -700,7 +755,9 @@ fn main() {
                             if let Ok(suggestions) = res {
                                 let shared: Vec<slint::SharedString> =
                                     suggestions.into_iter().map(|s| s.into()).collect();
-                                state.set_suggestions(slint::ModelRc::new(slint::VecModel::from(shared)));
+                                state.set_suggestions(slint::ModelRc::new(slint::VecModel::from(
+                                    shared,
+                                )));
                             }
                         }
                         BackgroundMsg::DetailFetched(res) => {
@@ -720,51 +777,69 @@ fn main() {
 
                                     let depends: Vec<slint::SharedString> =
                                         detail.depends.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_depends(slint::ModelRc::new(slint::VecModel::from(depends)));
+                                    state.set_detail_depends(slint::ModelRc::new(
+                                        slint::VecModel::from(depends),
+                                    ));
 
                                     let make_depends: Vec<slint::SharedString> =
                                         detail.make_depends.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_make_depends(
-                                        slint::ModelRc::new(slint::VecModel::from(make_depends)),
-                                    );
+                                    state.set_detail_make_depends(slint::ModelRc::new(
+                                        slint::VecModel::from(make_depends),
+                                    ));
 
                                     let opt_depends: Vec<slint::SharedString> =
                                         detail.opt_depends.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_opt_depends(
-                                        slint::ModelRc::new(slint::VecModel::from(opt_depends)),
-                                    );
+                                    state.set_detail_opt_depends(slint::ModelRc::new(
+                                        slint::VecModel::from(opt_depends),
+                                    ));
 
-                                    let check_depends: Vec<slint::SharedString> =
-                                        detail.check_depends.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_check_depends(
-                                        slint::ModelRc::new(slint::VecModel::from(check_depends)),
-                                    );
+                                    let check_depends: Vec<slint::SharedString> = detail
+                                        .check_depends
+                                        .into_iter()
+                                        .map(|s| s.into())
+                                        .collect();
+                                    state.set_detail_check_depends(slint::ModelRc::new(
+                                        slint::VecModel::from(check_depends),
+                                    ));
 
                                     let provides: Vec<slint::SharedString> =
                                         detail.provides.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_provides(slint::ModelRc::new(slint::VecModel::from(provides)));
+                                    state.set_detail_provides(slint::ModelRc::new(
+                                        slint::VecModel::from(provides),
+                                    ));
 
                                     let conflicts: Vec<slint::SharedString> =
                                         detail.conflicts.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_conflicts(slint::ModelRc::new(slint::VecModel::from(conflicts)));
+                                    state.set_detail_conflicts(slint::ModelRc::new(
+                                        slint::VecModel::from(conflicts),
+                                    ));
 
                                     let replaces: Vec<slint::SharedString> =
                                         detail.replaces.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_replaces(slint::ModelRc::new(slint::VecModel::from(replaces)));
+                                    state.set_detail_replaces(slint::ModelRc::new(
+                                        slint::VecModel::from(replaces),
+                                    ));
 
                                     let groups: Vec<slint::SharedString> =
                                         detail.groups.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_groups(slint::ModelRc::new(slint::VecModel::from(groups)));
+                                    state.set_detail_groups(slint::ModelRc::new(
+                                        slint::VecModel::from(groups),
+                                    ));
 
                                     let keywords: Vec<slint::SharedString> =
                                         detail.keywords.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_keywords(slint::ModelRc::new(slint::VecModel::from(keywords)));
+                                    state.set_detail_keywords(slint::ModelRc::new(
+                                        slint::VecModel::from(keywords),
+                                    ));
 
-                                    let co_maintainers: Vec<slint::SharedString> =
-                                        detail.co_maintainers.into_iter().map(|s| s.into()).collect();
-                                    state.set_detail_co_maintainers(
-                                        slint::ModelRc::new(slint::VecModel::from(co_maintainers)),
-                                    );
+                                    let co_maintainers: Vec<slint::SharedString> = detail
+                                        .co_maintainers
+                                        .into_iter()
+                                        .map(|s| s.into())
+                                        .collect();
+                                    state.set_detail_co_maintainers(slint::ModelRc::new(
+                                        slint::VecModel::from(co_maintainers),
+                                    ));
                                     state.set_detail_submitter(detail.submitter.into());
                                     state.set_detail_first_submitted(
                                         chrono::DateTime::<chrono::Utc>::from_timestamp(
@@ -776,22 +851,31 @@ fn main() {
                                         .into(),
                                     );
                                     state.set_detail_last_modified(
-                                        chrono::DateTime::<chrono::Utc>::from_timestamp(detail.last_modified, 0)
-                                            .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
-                                            .unwrap_or_default()
-                                            .into(),
+                                        chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                            detail.last_modified,
+                                            0,
+                                        )
+                                        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                                        .unwrap_or_default()
+                                        .into(),
                                     );
                                     state.set_detail_out_of_date(
                                         detail
                                             .out_of_date
-                                            .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
+                                            .and_then(|ts| {
+                                                chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                                    ts, 0,
+                                                )
+                                            })
                                             .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
                                             .unwrap_or_default()
                                             .into(),
                                     );
                                 }
                                 Err(err) => {
-                                    state.set_status_text(format!("Detail fetch failed: {}", err).into());
+                                    state.set_status_text(
+                                        format!("Detail fetch failed: {}", err).into(),
+                                    );
                                 }
                             }
                         }
@@ -856,5 +940,3 @@ fn format_duration(dur: chrono::Duration) -> String {
         format!("{}h", dur.num_hours())
     }
 }
-
-

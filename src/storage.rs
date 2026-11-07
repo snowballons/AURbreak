@@ -64,7 +64,7 @@ pub fn data_file() -> PathBuf {
     project_dir().join("cache.json")
 }
 
-fn ensure_parent(path: &PathBuf) {
+fn ensure_parent(path: &std::path::Path) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

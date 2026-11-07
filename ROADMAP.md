@@ -53,7 +53,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 | **Phase 3** | Autocomplete & Search Polish | 🟡 In Progress |
 | **Phase 3.5** | Settings & Preferences Configuration | ✅ Complete |
 | **Phase 4** | Advanced Features (Installed, Multi-info, Grouping) | ⬜ Planned |
-| **Phase 5** | Testing, CI & Packaging | 🟡 Active |
+| **Phase 5** | Testing, CI & Linux Packaging | ✅ Complete |
 
 ---
 
@@ -185,18 +185,25 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 
 ---
 
-### Phase 5: Testing, Performance & Deployment 🟡 (Active)
+### Phase 5: Testing, CI & Linux Packaging ✅ (Complete)
 
 - [x] **Unit Testing**:
-  - 15 unit tests covering deserialization, missing optional fields handling, RFC 2822 date parsing, search by serialization, and offline cache corruption recovery.
+  - 18 unit tests covering deserialization, missing optional fields handling, RFC 2822 date parsing, search by serialization, config persistence, and offline cache corruption recovery.
 - [x] **Headless Snapshot Testing**:
   - Automated generation of light and dark mode snapshots across all views via `--snapshot`.
 - [x] **Cargo Profile Optimizations**:
   - Thin LTO and symbols stripping in `[profile.release]`.
   - Dependency caching optimization in `[profile.dev]`.
-- [ ] **Packaging**:
-  - Create standard Arch Linux `PKGBUILD` for AUR distribution.
-  - Provide `.desktop` file and app icon.
+- [x] **Continuous Integration (`.github/workflows/ci.yml`)**:
+  - Runs on pull requests and pushes to `main`/`master`.
+  - `cargo fmt` check, `cargo clippy` with `-D warnings`, `cargo test`, and headless UI snapshot verification uploading snapshot artifacts.
+- [x] **Multi-Distro Release Automation (`.github/workflows/release.yml`)**:
+  - **Arch Linux**: Official `.pkg.tar.zst` built via `archlinux:base-devel` container.
+  - **Debian / Ubuntu**: `.deb` package via `cargo-deb` with desktop integration.
+  - **Fedora / RHEL / openSUSE**: `.rpm` package via `cargo-generate-rpm`.
+  - **Universal AppImage**: Portable standalone `.AppImage` via `appimagetool`.
+  - **Generic Tarball**: Portable `.tar.gz` with `install.sh` installer script.
+  - **Automated Publishing**: Generates `SHA256SUMS.txt` and publishes GitHub Release assets on version tags (`v*`).
 
 ---
 
@@ -206,7 +213,12 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 |---|---|
 | [`src/main.rs`](file:///home/jonnie/work/tries/browse-arch/browse-arch/src/main.rs) | Application lifecycle, background thread communication, filter logic, event loop poll, snapshot utility. |
 | [`src/client.rs`](file:///home/jonnie/work/tries/browse-arch/browse-arch/src/client.rs) | AUR RPC v5 client, OpenAPI schemas, RSS parsing, error handling, client unit tests. |
-| [`src/storage.rs`](file:///home/jonnie/work/tries/browse-arch/browse-arch/src/storage.rs) | XDG atomic cache persistence, load/save logic, corrupt file recovery tests. |
-| [`ui/app.slint`](file:///home/jonnie/work/tries/browse-arch/browse-arch/ui/app.slint) | Slint GUI: `Theme`, `AppState`, `AppLogic`, `NavTab`, `PackageCard`, `SearchBar`, `PackageDetail`, `AppWindow`. |
-| [`Cargo.toml`](file:///home/jonnie/work/tries/browse-arch/browse-arch/Cargo.toml) | Dependencies (`slint`, `reqwest`, `serde`, `chrono`, `open`), build profiles. |
+| [`src/storage.rs`](file:///home/jonnie/work/tries/browse-arch/browse-arch/src/storage.rs) | XDG atomic cache persistence, user settings config, load/save logic, corrupt file recovery tests. |
+| [`ui/app.slint`](file:///home/jonnie/work/tries/browse-arch/browse-arch/ui/app.slint) | Slint GUI: `Theme`, `AppState`, `AppLogic`, `NavTab`, `PackageCard`, `SearchBar`, `PackageDetail`, `SettingsView`, `AppWindow`. |
+| [`.github/workflows/ci.yml`](file:///home/jonnie/work/tries/browse-arch/browse-arch/.github/workflows/ci.yml) | GitHub Actions CI: formatting, clippy lints, unit testing, and headless UI snapshot verification. |
+| [`.github/workflows/release.yml`](file:///home/jonnie/work/tries/browse-arch/browse-arch/.github/workflows/release.yml) | GitHub Actions Release: packaging for Arch Linux (.pkg.tar.zst), Debian/Ubuntu (.deb), Fedora (.rpm), AppImage, and tarball. |
+| [`packaging/aurbreak.desktop`](file:///home/jonnie/work/tries/browse-arch/browse-arch/packaging/aurbreak.desktop) | XDG desktop entry specification for Linux desktop application menus. |
+| [`packaging/PKGBUILD`](file:///home/jonnie/work/tries/browse-arch/browse-arch/packaging/PKGBUILD) | Arch Linux packaging recipe for AUR distribution. |
+| [`packaging/install.sh`](file:///home/jonnie/work/tries/browse-arch/browse-arch/packaging/install.sh) | Portable shell installer for system-wide or user-local installation. |
+| [`Cargo.toml`](file:///home/jonnie/work/tries/browse-arch/browse-arch/Cargo.toml) | Dependencies (`slint`, `reqwest`, `serde`, `chrono`, `open`), deb/rpm metadata, build profiles. |
 | [`ROADMAP.md`](file:///home/jonnie/work/tries/browse-arch/browse-arch/ROADMAP.md) | High-level roadmap, architecture documentation, and phase progress tracker. |
