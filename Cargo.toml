@@ -38,16 +38,16 @@ assets = [
 ]
 
 [dependencies]
-slint = "1.17"
-reqwest = { version = "0.12.28", features = ["blocking", "rustls-tls"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-directories = "6"
-chrono = { version = "0.4", features = ["serde"] }
-open = "5"
+slint = "1.18.1"
+reqwest = { version = "0.13.5", features = ["blocking", "rustls", "query"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+directories = "6.0.0"
+chrono = { version = "0.4.45", features = ["serde"] }
+open = "5.4.5"
 
 [build-dependencies]
-slint-build = "1.17"
+slint-build = "1.18.1"
 
 # Release: "thin" LTO gives near-fat-LTO benefit at a fraction of the compile
 # time. The full "fat" LTO here exceeds the build budget (Slint's dep tree is
