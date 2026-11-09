@@ -51,15 +51,15 @@ fn project_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("org", "aur", "aurbreak") {
         let new_dir = dirs.data_dir().to_path_buf();
         // Seamless migration: if new aurbreak dir does not exist yet, check legacy browse-arch dir
-        if !new_dir.exists() {
-            if let Some(old_dirs) = directories::ProjectDirs::from("org", "aur", "browse-arch") {
-                let old_dir = old_dirs.data_dir().to_path_buf();
-                if old_dir.exists() {
-                    let _ = std::fs::create_dir_all(&new_dir);
-                    if let Ok(entries) = std::fs::read_dir(&old_dir) {
-                        for entry in entries.flatten() {
-                            let _ = std::fs::copy(entry.path(), new_dir.join(entry.file_name()));
-                        }
+        if !new_dir.exists()
+            && let Some(old_dirs) = directories::ProjectDirs::from("org", "aur", "browse-arch")
+        {
+            let old_dir = old_dirs.data_dir().to_path_buf();
+            if old_dir.exists() {
+                let _ = std::fs::create_dir_all(&new_dir);
+                if let Ok(entries) = std::fs::read_dir(&old_dir) {
+                    for entry in entries.flatten() {
+                        let _ = std::fs::copy(entry.path(), new_dir.join(entry.file_name()));
                     }
                 }
             }
@@ -292,12 +292,20 @@ mod tests {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         let _guard = LOCK.lock().unwrap();
         let prev = std::env::var("BROWSE_ARCH_TEST_DIR").ok();
-        std::env::set_var("BROWSE_ARCH_TEST_DIR", dir);
+        // SAFETY: BROWSE_ARCH_TEST_DIR is only read by this test binary, and the
+        // global LOCK above serializes every mutation so there are no concurrent
+        // readers of this environment variable within the process.
+        unsafe {
+            std::env::set_var("BROWSE_ARCH_TEST_DIR", dir);
+        }
         let r = f();
-        if let Some(p) = prev {
-            std::env::set_var("BROWSE_ARCH_TEST_DIR", p);
-        } else {
-            std::env::remove_var("BROWSE_ARCH_TEST_DIR");
+        // SAFETY: same as above — serialized by LOCK, no concurrent access.
+        unsafe {
+            if let Some(p) = prev {
+                std::env::set_var("BROWSE_ARCH_TEST_DIR", p);
+            } else {
+                std::env::remove_var("BROWSE_ARCH_TEST_DIR");
+            }
         }
         r
     }
