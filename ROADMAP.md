@@ -50,7 +50,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 | **Phase 1** | Core Search & RPC v5 Integration | ✅ Complete |
 | **Phase 2** | Package Detail View & Inspector | ✅ Complete |
 | **Phase 2.5** | UI/UX Overhaul & Layout Restructuring | ✅ Complete |
-| **Phase 3** | Autocomplete & Search Polish | 🟡 In Progress |
+| **Phase 3** | Autocomplete & Search Polish | ✅ Complete |
 | **Phase 3.5** | Settings & Preferences Configuration | ✅ Complete |
 | **Phase 4** | Advanced Features (Installed, Multi-info, Grouping) | ⬜ Planned |
 | **Phase 5** | Testing, CI & Linux Packaging | ✅ Complete |
@@ -121,23 +121,38 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 
 ---
 
-### Phase 3: Autocomplete & Search Experience Polish 🟡 (In Progress)
+### Phase 3: Autocomplete & Search Experience Polish ✅ (Complete)
 
 - [x] Basic suggestions API (`suggest_packages` client endpoint & `get-suggestions` callback wired).
-- [ ] **300ms Debounce Timer**:
-  - Add timer for autocomplete suggestion queries to avoid spamming the AUR RPC while typing.
-- [ ] **Search History**:
-  - Persist the last 10 search queries locally in `storage.rs`.
-  - Render recent search queries as clickable chips beneath the search bar.
-  - Provide a "Clear History" button.
-- [ ] **Loading Skeletons**:
-  - Display skeleton placeholder cards in the list while `search-loading` is active.
-- [ ] **Enhanced Error States**:
-  - In-app retry button for network timeouts and HTTP errors.
-  - Friendly rate-limit notice ("Too many requests, retrying in Ns").
-- [ ] **Keyboard Suggestion Navigation**:
-  - Navigate suggestion dropdown items via <kbd>↑</kbd> and <kbd>↓</kbd> arrow keys.
-  - Autofill search input with selected suggestion on <kbd>Tab</kbd> or <kbd>Enter</kbd>.
+- [x] **300ms Debounce Timer**:
+  - Single-shot `slint::Timer` restarted on each keystroke; only fires the network request after 300ms of silence.
+  - Clears stale suggestions immediately when query drops below 2 chars.
+- [x] **Search History**:
+  - Persists the last 10 search queries atomically to `~/.local/share/aurbreak/history.json` via `storage::push_history`.
+  - Deduplicates — re-searching an existing query bubbles it to the top.
+  - Rendered as clickable chips below the search bar when no results are shown.
+  - Autocomplete dropdown shows history rows (with 🕐 icon) when query is empty and input is focused.
+  - "Clear" button in dropdown header and "✕ Clear" chip remove all history.
+  - 5 new unit tests covering push, deduplication, limit cap, clear, and blank-ignore.
+- [x] **Loading Skeletons**:
+  - Three placeholder cards (90px each) rendered while `search-loading` is active.
+  - Each card has a title bar and two description line rectangles styled with theme borders.
+- [x] **Enhanced Error States**:
+  - `AppState.search-error` property carries the full error message string.
+  - Inline error banner in `SearchBar` with warning colours, error text, and a Retry button.
+  - Retry re-runs the last query+by combination via `AppLogic.retry-search`.
+  - Error is cleared on the next successful search or on retry dispatch.
+- [x] **Keyboard Navigation**:
+  - `↑` / `↓` arrows navigate suggestion rows (highlighted in accent blue).
+  - `Tab` fills the input with the highlighted suggestion and dismisses the dropdown.
+  - `Enter` on the input submits the search (existing) or confirms a highlighted suggestion.
+  - `Esc` clears the search query and dismisses suggestions.
+  - `/` from anywhere (outside settings) switches to the Search tab.
+- [x] **Autocomplete Dropdown**:
+  - Floating panel below the search input, visible when input is focused.
+  - Shows API suggestions (🔍) when typing; shows history (🕐) when query is empty.
+  - Click a row to fill the query and immediately fire a search.
+  - Dismissed on `Esc`, on search submit, and on suggestion `Tab`-completion.
 
 ---
 
