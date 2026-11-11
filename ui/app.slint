@@ -68,6 +68,8 @@ export global AppState {
     in-out property <int> search-result-count: 0;
     in-out property <bool> search-loading: false;
     in-out property <[string]> suggestions: [];
+    in-out property <string> search-error: "";          // non-empty when last search failed
+    in-out property <[string]> search-history: [];       // up to 10 recent queries
 
     // Detail view state
     in-out property <bool> show-detail: false;
@@ -127,6 +129,9 @@ export global AppLogic {
     callback search-page-changed(int);
     callback search-by-changed(int);
     callback get-suggestions(string);
+    callback dismiss-suggestions();
+    callback retry-search();
+    callback clear-search-history();
 
     // Filter callback
     callback filter-changed(string);
@@ -365,11 +370,23 @@ component SearchBar inherits Rectangle {
     in-out property <int> total-pages: 1;
     in-out property <int> result-count: 0;
     in-out property <[string]> suggestions: [];
+    in-out property <string> search-error: "";
+    in-out property <[string]> search-history: [];
+    // Which suggestion row is highlighted (-1 = none)
+    in-out property <int> suggestion-index: -1;
 
     callback search-requested(string, int, int);
     callback page-changed(int);
     callback by-changed(int);
     callback get-suggestions(string);
+    callback dismiss-suggestions();
+    callback retry-search();
+    callback clear-history();
+
+    // Whether the autocomplete/history panel is visible
+    private property <bool> show-dropdown:
+        (root.suggestions.length > 0 || (root.query == "" && root.search-history.length > 0))
+        && search-input.has-focus;
 
     vertical-stretch: 0;
     background: Theme.card-bg;
@@ -382,7 +399,7 @@ component SearchBar inherits Rectangle {
         spacing: 8px;
         alignment: start;
 
-        // Row 1: Search LineEdit, SearchBy Dropdown, Search Button
+        // ── Row 1: Search input, SearchBy dropdown, Search button ───────────
         HorizontalLayout {
             height: 34px;
             vertical-stretch: 0;
@@ -393,12 +410,48 @@ component SearchBar inherits Rectangle {
                 placeholder-text: "Search AUR packages (e.g. google-chrome, spotify, yay)…";
                 horizontal-stretch: 1;
                 edited => {
+                    root.suggestion-index = -1;
                     root.get-suggestions(root.query);
                 }
                 accepted => {
                     if (root.query != "" && !root.loading) {
+                        root.suggestion-index = -1;
                         root.search-requested(root.query, root.by, 1);
                     }
+                }
+                key-pressed(ev) => {
+                    if (ev.text == Key.Escape) {
+                        root.query = "";
+                        root.suggestion-index = -1;
+                        root.dismiss-suggestions();
+                        return accept;
+                    }
+                    if (ev.text == Key.DownArrow) {
+                        if (root.suggestions.length > 0) {
+                            root.suggestion-index = Math.min(
+                                root.suggestion-index + 1,
+                                root.suggestions.length - 1
+                            );
+                        }
+                        return accept;
+                    }
+                    if (ev.text == Key.UpArrow) {
+                        if (root.suggestion-index > 0) {
+                            root.suggestion-index = root.suggestion-index - 1;
+                        } else {
+                            root.suggestion-index = -1;
+                        }
+                        return accept;
+                    }
+                    if (ev.text == Key.Tab) {
+                        if (root.suggestion-index >= 0 && root.suggestion-index < root.suggestions.length) {
+                            root.query = root.suggestions[root.suggestion-index];
+                            root.suggestion-index = -1;
+                            root.dismiss-suggestions();
+                        }
+                        return accept;
+                    }
+                    return reject;
                 }
             }
 
@@ -415,12 +468,244 @@ component SearchBar inherits Rectangle {
                 text: root.loading ? "Searching…" : "Search";
                 enabled: !root.loading && root.query != "";
                 primary: true;
-                clicked => { root.search-requested(root.query, root.by, 1); }
+                clicked => {
+                    root.suggestion-index = -1;
+                    root.search-requested(root.query, root.by, 1);
+                }
             }
         }
 
-        // Row 2: Results info & Pagination (visible if results exist)
-        if root.result-count > 0: HorizontalLayout {
+        // ── Autocomplete & History Dropdown (floating below the input) ──────
+        if root.show-dropdown: Rectangle {
+            vertical-stretch: 0;
+            background: Theme.card-bg;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.border-default;
+            clip: true;
+
+            VerticalLayout {
+                spacing: 0px;
+                alignment: start;
+
+                // History header row (shown when query is empty and history exists)
+                if root.query == "" && root.search-history.length > 0: HorizontalLayout {
+                    height: 28px;
+                    vertical-stretch: 0;
+                    padding-left: 10px;
+                    padding-right: 6px;
+                    alignment: space-between;
+
+                    Text {
+                        text: "Recent searches";
+                        font-size: 10px;
+                        font-weight: 700;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        height: 20px;
+                        border-radius: 4px;
+                        background: clrhist-touch.has-hover ? Theme.card-bg-hover : Colors.transparent;
+
+                        clrhist-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.clear-history(); }
+                        }
+                        HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            alignment: center;
+                            Text {
+                                text: "Clear";
+                                font-size: 10px;
+                                font-weight: 600;
+                                color: Theme.text-accent;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Suggestion rows (from API) or history rows (when query empty)
+                for item[idx] in (root.query != "" ? root.suggestions : root.search-history): Rectangle {
+                    height: 32px;
+                    vertical-stretch: 0;
+                    background: idx == root.suggestion-index
+                        ? Theme.card-bg-selected
+                        : (sug-touch.has-hover ? Theme.card-bg-hover : Colors.transparent);
+                    animate background { duration: 100ms; }
+
+                    sug-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.query = item;
+                            root.suggestion-index = -1;
+                            root.dismiss-suggestions();
+                            root.search-requested(item, root.by, 1);
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 8px;
+                        alignment: start;
+
+                        Text {
+                            text: root.query != "" ? "🔍" : "🕐";
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            color: Theme.text-muted;
+                        }
+
+                        Text {
+                            text: item;
+                            font-size: 13px;
+                            color: idx == root.suggestion-index ? Theme.text-accent : Theme.text-primary;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Loading skeleton cards (shown while search-loading is true) ──────
+        if root.loading: VerticalLayout {
+            spacing: 8px;
+            vertical-stretch: 0;
+
+            for i in [0, 1, 2]: Rectangle {
+                height: 90px;
+                vertical-stretch: 0;
+                background: Theme.card-bg;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+
+                // Overlay shimmer — pulses between card-bg and card-bg-hover
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    border-radius: 8px;
+                    background: Theme.card-bg-hover;
+                    opacity: 0.5;
+                }
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+                    alignment: start;
+
+                    // Title bar skeleton
+                    Rectangle {
+                        height: 14px;
+                        width: 220px;
+                        border-radius: 4px;
+                        background: Theme.border-default;
+                    }
+                    // Description skeleton line 1
+                    Rectangle {
+                        height: 10px;
+                        width: 380px;
+                        border-radius: 3px;
+                        background: Theme.border-subtle;
+                    }
+                    // Description skeleton line 2
+                    Rectangle {
+                        height: 10px;
+                        width: 280px;
+                        border-radius: 3px;
+                        background: Theme.border-subtle;
+                    }
+                }
+            }
+        }
+
+        // ── Error state with retry button ────────────────────────────────────
+        if root.search-error != "" && !root.loading: Rectangle {
+            vertical-stretch: 0;
+            background: Theme.warning-bg;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.warning;
+
+            HorizontalLayout {
+                padding: 12px;
+                spacing: 12px;
+                alignment: space-between;
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "⚠️";
+                        font-size: 16px;
+                        vertical-alignment: center;
+                    }
+
+                    VerticalLayout {
+                        spacing: 2px;
+                        alignment: center;
+                        Text {
+                            text: "Search failed";
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: Theme.warning;
+                        }
+                        Text {
+                            text: root.search-error;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 32px;
+                    border-radius: 6px;
+                    background: retry-touch.has-hover ? Theme.warning : Theme.section-bg;
+                    border-width: 1px;
+                    border-color: Theme.warning;
+                    animate background { duration: 150ms; }
+
+                    retry-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.retry-search(); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        alignment: center;
+                        spacing: 6px;
+                        Text {
+                            text: "↺";
+                            font-size: 13px;
+                            color: retry-touch.has-hover ? #ffffff : Theme.warning;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "Retry";
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: retry-touch.has-hover ? #ffffff : Theme.warning;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Results info & Pagination (visible if results exist) ─────────────
+        if root.result-count > 0 && !root.loading: HorizontalLayout {
             height: 30px;
             vertical-stretch: 0;
             spacing: 12px;
@@ -455,6 +740,98 @@ component SearchBar inherits Rectangle {
                     text: "Next ▶";
                     enabled: root.page < root.total-pages && !root.loading;
                     clicked => { root.page-changed(root.page + 1); }
+                }
+            }
+        }
+
+        // ── History chips (shown below input when no results yet) ────────────
+        if root.search-history.length > 0 && root.result-count == 0 && root.search-error == "" && !root.loading && !root.show-dropdown: VerticalLayout {
+            spacing: 6px;
+            vertical-stretch: 0;
+
+            HorizontalLayout {
+                height: 18px;
+                vertical-stretch: 0;
+                spacing: 8px;
+                alignment: start;
+
+                Text {
+                    text: "Recent:";
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                vertical-stretch: 0;
+
+                for hist-item in root.search-history: Rectangle {
+                    height: 26px;
+                    border-radius: 13px;
+                    background: chip-touch.has-hover ? Theme.pill-active-bg : Theme.pill-bg;
+                    border-width: 1px;
+                    border-color: chip-touch.has-hover ? Theme.border-selected : Theme.border-subtle;
+                    animate background { duration: 150ms; }
+
+                    chip-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.query = hist-item;
+                            root.search-requested(hist-item, root.by, 1);
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        alignment: center;
+                        spacing: 4px;
+                        Text {
+                            text: "🕐";
+                            font-size: 10px;
+                            color: chip-touch.has-hover ? #ffffff : Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: hist-item;
+                            font-size: 11px;
+                            font-weight: 500;
+                            color: chip-touch.has-hover ? #ffffff : Theme.text-secondary;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // Clear history chip
+                Rectangle {
+                    height: 26px;
+                    border-radius: 13px;
+                    background: clr-touch.has-hover ? Theme.warning-bg : Colors.transparent;
+                    border-width: 1px;
+                    border-color: clr-touch.has-hover ? Theme.warning : Theme.border-subtle;
+                    animate background { duration: 150ms; }
+
+                    clr-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.clear-history(); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        alignment: center;
+                        Text {
+                            text: "✕ Clear";
+                            font-size: 10px;
+                            font-weight: 600;
+                            color: clr-touch.has-hover ? Theme.warning : Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
         }
@@ -1877,6 +2254,13 @@ export component AppWindow inherits Window {
                     return accept;
                 }
             }
+            // "/" focuses the search tab and positions cursor in the search input
+            if (ev.text == "/") {
+                if (!AppState.show-settings && AppState.active-tab != 2) {
+                    AppLogic.tab-changed(2);
+                    return accept;
+                }
+            }
             return reject;
         }
 
@@ -2072,11 +2456,16 @@ export component AppWindow inherits Window {
                 total-pages <=> AppState.search-total-pages;
                 result-count <=> AppState.search-result-count;
                 suggestions <=> AppState.suggestions;
+                search-error <=> AppState.search-error;
+                search-history <=> AppState.search-history;
 
                 search-requested(query, by, page) => { AppLogic.search-requested(query, by, page); }
                 page-changed(page) => { AppLogic.search-page-changed(page); }
                 by-changed(by) => { AppLogic.search-by-changed(by); }
                 get-suggestions(prefix) => { AppLogic.get-suggestions(prefix); }
+                dismiss-suggestions() => { AppLogic.dismiss-suggestions(); }
+                retry-search() => { AppLogic.retry-search(); }
+                clear-history() => { AppLogic.clear-search-history(); }
             }
 
             if AppState.active-tab != 2: HorizontalLayout {
