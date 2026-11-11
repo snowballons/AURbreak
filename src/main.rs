@@ -42,6 +42,30 @@ fn apply_filter(app: &AppWindow, packages: &[AurPackage], filter: &str) {
     }
 }
 
+/// Apply client-side pagination to search results.
+///
+/// AUR RPC v5 returns all matching results in a single response with no
+/// server-side paging. We slice the full result set here so the UI shows
+/// only the items for the current page.
+///
+/// `all_results` must be the complete unfiltered result set from the last
+/// search. The current page and page size are read from `AppState`.
+fn apply_search_page(app: &AppWindow, all_results: &[AurPackage]) {
+    let state = app.global::<AppState>();
+    let page_size = (state.get_search_page_size().max(1)) as usize;
+    let page = (state.get_search_page().max(1) as usize) - 1; // 0-indexed
+    let start = page * page_size;
+    let end = (start + page_size).min(all_results.len());
+    let slice = if start < all_results.len() {
+        &all_results[start..end]
+    } else {
+        &[]
+    };
+    state.set_packages(slint::ModelRc::new(packages_to_model(slice)));
+    state.set_displayed_items_count(slice.len() as i32);
+    state.set_total_items_count(all_results.len() as i32);
+}
+
 pub fn save_snapshot(ui: &AppWindow, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.window().set_size(slint::LogicalSize::new(1080.0, 720.0));
     ui.show()?;
@@ -315,6 +339,13 @@ fn main() {
         state.set_search_by(config.default_search_by);
         state.set_search_page_size(config.search_page_size);
         ui.global::<Theme>().set_theme_mode(config.theme_mode);
+
+        // Restore persisted search history into the UI model.
+        let hist: Vec<slint::SharedString> = storage::load_history()
+            .into_iter()
+            .map(|s| s.into())
+            .collect();
+        state.set_search_history(slint::ModelRc::new(slint::VecModel::from(hist)));
     }
 
     // Offline-first: paint from the local cache immediately, then refresh in
@@ -326,13 +357,24 @@ fn main() {
             state.set_last_fetched_str(format!("cached {} ago", format_duration(age)).into());
             *current_pkgs.borrow_mut() = loaded.packages.clone();
             apply_filter(&ui, &loaded.packages, "");
-            Some(loaded.packages)
+            Some((loaded.packages, age))
         }
         _ => None,
     };
 
-    if cached.is_none() {
-        trigger_last_updated_fetch(&ui, &tx);
+    match cached {
+        None => {
+            // No cache on disk yet — fetch immediately.
+            trigger_last_updated_fetch(&ui, &tx);
+        }
+        Some((_, age)) if age > chrono::Duration::hours(6) => {
+            // Cache is stale; refresh in the background while the stale data
+            // remains visible so the app feels instant.
+            trigger_last_updated_fetch(&ui, &tx);
+        }
+        Some(_) => {
+            // Cache is fresh — nothing to do until the user manually refreshes.
+        }
     }
 
     // Filter callback handler
@@ -387,9 +429,14 @@ fn main() {
             state.set_active_tab(new_tab);
             state.set_search_filter("".into());
             if new_tab == 0 {
-                trigger_last_updated_fetch(&app, &tx_tab);
+                // Guard: skip if a fetch is already in flight to avoid stacking threads.
+                if !state.get_loading() {
+                    trigger_last_updated_fetch(&app, &tx_tab);
+                }
             } else if new_tab == 1 {
-                trigger_rss_fetch(&app, &tx_tab);
+                if !state.get_loading() {
+                    trigger_rss_fetch(&app, &tx_tab);
+                }
             } else if new_tab == 2 {
                 // Search tab - don't auto-fetch, wait for user query
                 current_pkgs_tab.borrow_mut().clear();
@@ -403,13 +450,18 @@ fn main() {
 
     ui.global::<AppLogic>().on_open_pkg_page(move |pkg_name| {
         let url = format!("https://aur.archlinux.org/packages/{pkg_name}");
-        let _ = open::that(&url);
+        // open::that() blocks on Linux until xdg-open exits (which can be
+        // until the browser window closes). Use that_in_background() so the
+        // UI thread is never stalled.
+        let _ = open::that_in_background(&url);
     });
 
     ui.global::<AppLogic>().on_open_url(move |raw_url| {
         let s = raw_url.to_string();
-        if !s.is_empty() {
-            let _ = open::that(&s);
+        // Only open http/https URLs — reject file://, custom protocol handlers,
+        // or anything a malicious AUR package metadata field could inject.
+        if s.starts_with("https://") || s.starts_with("http://") {
+            let _ = open::that_in_background(&s);
         }
     });
 
@@ -461,15 +513,21 @@ fn main() {
         });
 
     let ui_weak = ui.as_weak();
+    let current_pkgs_pgsize = current_pkgs.clone();
     ui.global::<AppLogic>()
         .on_search_page_size_changed(move |size| {
             if let Some(app) = ui_weak.upgrade() {
                 let state = app.global::<AppState>();
                 let count = state.get_search_result_count();
                 if count > 0 && size > 0 {
+                    // Recalculate total pages and reset to page 1.
+                    state.set_search_page(1);
                     state.set_search_total_pages(
                         ((count as f64) / (size as f64)).ceil().max(1.0) as i32
                     );
+                    // Re-slice the existing results for the new page size.
+                    let pkgs = current_pkgs_pgsize.borrow();
+                    apply_search_page(&app, &pkgs);
                 }
                 let mut cfg = storage::load_config();
                 cfg.search_page_size = size;
@@ -496,60 +554,88 @@ fn main() {
         .on_search_requested(move |query, by, _page| {
             if let Some(app) = ui_weak.upgrade() {
                 let state = app.global::<AppState>();
+                let q = query.to_string();
                 state.set_search_loading(true);
-                state.set_status_text(format!("Searching for \"{}\"…", query).into());
+                state.set_search_error("".into()); // clear any prior error
+                state.set_suggestions(slint::ModelRc::new(VecModel::default())); // dismiss dropdown
+                state.set_status_text(format!("Searching for \"{}\"…", q).into());
+
+                // Persist this query to search history immediately.
+                storage::push_history(&q);
+                // Reload history into state so chips update.
+                let hist: Vec<slint::SharedString> = storage::load_history()
+                    .into_iter()
+                    .map(|s| s.into())
+                    .collect();
+                state.set_search_history(slint::ModelRc::new(slint::VecModel::from(hist)));
 
                 let tx = tx_search.clone();
-                let query = query.to_string();
                 let by = SearchBy::all()
                     .get(by as usize)
                     .copied()
                     .unwrap_or(SearchBy::NameDesc);
                 thread::spawn(move || {
-                    let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                    let res = client::search_packages(&q, Some(by)).map_err(|e| e.to_string());
                     let _ = tx.send(BackgroundMsg::SearchFetched(res));
                 });
             }
         });
 
-    // Suggest callback for autocomplete
+    // Suggest callback — 300ms debounce so we don't fire a request on every
+    // keystroke. We hold a single-shot timer in an Rc<RefCell> and restart it
+    // on each call; only the final keystroke within the debounce window fires.
     let ui_weak = ui.as_weak();
     let tx_suggest = tx.clone();
+    let debounce_timer = Rc::new(RefCell::new(slint::Timer::default()));
     ui.global::<AppLogic>().on_get_suggestions(move |prefix| {
-        if let Some(_app) = ui_weak.upgrade() {
-            let prefix = prefix.to_string();
-            if prefix.len() < 2 {
-                return;
-            }
-            let tx = tx_suggest.clone();
-            thread::spawn(move || {
-                let res = client::suggest_packages(&prefix).map_err(|e| e.to_string());
-                let _ = tx.send(BackgroundMsg::SuggestFetched(res));
-            });
-        }
-    });
-
-    // Search page change callback
-    let ui_weak = ui.as_weak();
-    let tx_page = tx.clone();
-    ui.global::<AppLogic>()
-        .on_search_page_changed(move |_page| {
+        let prefix_str = prefix.to_string();
+        if prefix_str.len() < 2 {
+            // Clear stale suggestions immediately when the input is too short.
             if let Some(app) = ui_weak.upgrade() {
-                let state = app.global::<AppState>();
-                let query = state.get_search_query().to_string();
-                if query.is_empty() {
+                app.global::<AppState>()
+                    .set_suggestions(slint::ModelRc::new(VecModel::default()));
+            }
+            return;
+        }
+        let tx = tx_suggest.clone();
+        let ui_weak2 = ui_weak.clone();
+        let timer_ref = debounce_timer.clone();
+        // Restart the debounce window.
+        let new_timer = slint::Timer::default();
+        new_timer.start(
+            slint::TimerMode::SingleShot,
+            std::time::Duration::from_millis(300),
+            move || {
+                // If the UI is gone by the time the timer fires, skip.
+                if ui_weak2.upgrade().is_none() {
                     return;
                 }
-                let by = SearchBy::all()
-                    .get(state.get_search_by() as usize)
-                    .copied()
-                    .unwrap_or(SearchBy::NameDesc);
-                state.set_search_loading(true);
-                let tx = tx_page.clone();
+                let res_tx = tx.clone();
+                let p = prefix_str.clone();
                 thread::spawn(move || {
-                    let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
-                    let _ = tx.send(BackgroundMsg::SearchFetched(res));
+                    let res = client::suggest_packages(&p).map_err(|e| e.to_string());
+                    let _ = res_tx.send(BackgroundMsg::SuggestFetched(res));
                 });
+            },
+        );
+        *timer_ref.borrow_mut() = new_timer;
+    });
+
+    // Search page change callback — re-slice the already-fetched results for
+    // the requested page. No new network request needed: AUR RPC v5 returns
+    // all results in a single response.
+    let ui_weak = ui.as_weak();
+    let current_pkgs_page = current_pkgs.clone();
+    ui.global::<AppLogic>()
+        .on_search_page_changed(move |page| {
+            if let Some(app) = ui_weak.upgrade() {
+                let state = app.global::<AppState>();
+                if state.get_search_query().is_empty() {
+                    return;
+                }
+                state.set_search_page(page);
+                let pkgs = current_pkgs_page.borrow();
+                apply_search_page(&app, &pkgs);
             }
         });
 
@@ -623,6 +709,51 @@ fn main() {
         if let Some(app) = ui_weak.upgrade() {
             let state = app.global::<AppState>();
             state.set_show_detail(false);
+        }
+    });
+
+    // Clear search history callback
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_clear_search_history(move || {
+        storage::clear_history();
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            state.set_search_history(slint::ModelRc::new(VecModel::default()));
+        }
+    });
+
+    // Retry last search callback — re-runs the current query with the current
+    // search-by setting. Used by the error state retry button.
+    let ui_weak = ui.as_weak();
+    let tx_retry = tx.clone();
+    ui.global::<AppLogic>().on_retry_search(move || {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            let query = state.get_search_query().to_string();
+            if query.is_empty() {
+                return;
+            }
+            let by = SearchBy::all()
+                .get(state.get_search_by() as usize)
+                .copied()
+                .unwrap_or(SearchBy::NameDesc);
+            state.set_search_loading(true);
+            state.set_search_error("".into());
+            state.set_status_text(format!("Retrying search for \"{}\"…", query).into());
+            let tx = tx_retry.clone();
+            thread::spawn(move || {
+                let res = client::search_packages(&query, Some(by)).map_err(|e| e.to_string());
+                let _ = tx.send(BackgroundMsg::SearchFetched(res));
+            });
+        }
+    });
+
+    // Dismiss suggestions (e.g. Esc pressed in search input)
+    let ui_weak = ui.as_weak();
+    ui.global::<AppLogic>().on_dismiss_suggestions(move || {
+        if let Some(app) = ui_weak.upgrade() {
+            app.global::<AppState>()
+                .set_suggestions(slint::ModelRc::new(VecModel::default()));
         }
     });
 
@@ -700,6 +831,7 @@ fn main() {
 
                             match res {
                                 Ok(search_result) => {
+                                    let total = search_result.resultcount;
                                     let aur_pkgs: Vec<AurPackage> = search_result
                                         .results
                                         .into_iter()
@@ -730,24 +862,29 @@ fn main() {
                                         .collect();
 
                                     *current_pkgs_event.borrow_mut() = aur_pkgs.clone();
-                                    let filter = state.get_search_filter().to_string();
-                                    apply_filter(&app, &aur_pkgs, &filter);
-                                    state.set_search_result_count(search_result.resultcount);
-                                    let page_size = state.get_search_page_size().max(10);
+
+                                    // Reset to page 1 on every new search result, then slice.
+                                    state.set_search_page(1);
+                                    state.set_search_error("".into()); // clear any prior error
+                                    state.set_search_result_count(total);
+                                    let page_size = state.get_search_page_size().max(1);
+                                    let actual_count = aur_pkgs.len() as i32;
                                     state.set_search_total_pages(
-                                        ((search_result.resultcount as f64) / (page_size as f64))
+                                        ((actual_count as f64) / (page_size as f64))
                                             .ceil()
-                                            .max(1.0)
-                                            as i32,
+                                            .max(1.0) as i32,
                                     );
+                                    // Show only the first page of results.
+                                    apply_search_page(&app, &aur_pkgs);
+
                                     state.set_last_fetched_str("just now".into());
                                     state.set_status_text(
-                                        format!("Found {} packages.", search_result.resultcount)
-                                            .into(),
+                                        format!("Found {} packages.", total).into(),
                                     );
                                 }
                                 Err(err) => {
                                     state.set_status_text(format!("Search failed: {}", err).into());
+                                    state.set_search_error(err.into());
                                 }
                             }
                         }
