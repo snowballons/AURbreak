@@ -95,7 +95,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
   - License tag.
   - Grouped dependency cards (`depends`, `make_depends`, `opt_depends`, `provides`, `conflicts`).
 - [x] **External Link Launching**:
-  - Integrated `open::that` to open `https://aur.archlinux.org/packages/{name}` in the user's default browser.
+  - Integrated `open::that_in_background` to open `https://aur.archlinux.org/packages/{name}` in the user's default browser without blocking the UI thread.
 
 ---
 
@@ -184,6 +184,9 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
 
 ### Phase 4: Advanced Features ⬜ (Planned)
 
+- [x] **Theme Persistence** *(completed in Phase 3.5)*:
+  - `AppConfig.theme_mode` saved on change and restored at startup via `storage::save_config` / `load_config`.
+  - Live switching between System Default, Dark, and Light; preference survives app restarts.
 - [ ] **Multi-Info Batch Fetch**:
   - Utilize existing `get_multi_info(&[&str])` to fetch enriched metadata (exact vote counts, popularity, maintainer) for visible packages in RSS feeds.
 - [ ] **Installed Packages Tab**:
@@ -194,7 +197,7 @@ AURbreak provides a modern, responsive GUI for exploring, searching, and inspect
   - Group search results sharing the same `PackageBase` (e.g., `yay`, `yay-bin`, `yay-git`).
   - Expandable group headers with base package details.
 - [ ] **Search Sharing & URL Handling**:
-  - Support startup arguments and URL scheme parsing (e.g. `browse-arch --search yay --by name-desc`).
+  - Support startup arguments and URL scheme parsing (e.g. `aurbreak --search yay --by name-desc`).
 - [ ] **Context Menu**:
   - Right-click context menu on `PackageCard` using Slint's `ContextMenuArea`: "Copy package name", "Copy install command", "Open in AUR".
 
