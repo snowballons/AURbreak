@@ -298,7 +298,11 @@ fn check_status(
 
 pub fn fetch_last_updated() -> Result<Vec<AurPackage>, FetchError> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent(concat!("aurbreak/", env!("CARGO_PKG_VERSION"), " (aur browser)"))
+        .user_agent(concat!(
+            "aurbreak/",
+            env!("CARGO_PKG_VERSION"),
+            " (aur browser)"
+        ))
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))?;
@@ -337,7 +341,11 @@ fn parse_rfc2822_date(s: &str) -> Option<DateTime<Utc>> {
 
 pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent(concat!("aurbreak/", env!("CARGO_PKG_VERSION"), " (aur browser)"))
+        .user_agent(concat!(
+            "aurbreak/",
+            env!("CARGO_PKG_VERSION"),
+            " (aur browser)"
+        ))
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))?;
@@ -357,7 +365,11 @@ pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
 /// Build a reqwest client with standard config.
 fn aur_client() -> Result<reqwest::blocking::Client, FetchError> {
     reqwest::blocking::Client::builder()
-        .user_agent(concat!("aurbreak/", env!("CARGO_PKG_VERSION"), " (aur browser)"))
+        .user_agent(concat!(
+            "aurbreak/",
+            env!("CARGO_PKG_VERSION"),
+            " (aur browser)"
+        ))
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))
