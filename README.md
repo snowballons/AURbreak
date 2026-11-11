@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>A fast, lightweight, offline-first desktop browser for the Arch User Repository (AUR).</strong>
+  <strong>A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR).</strong>
 </p>
 
 <p align="center">

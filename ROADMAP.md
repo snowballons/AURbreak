@@ -1,6 +1,6 @@
 # AURbreak — Project Roadmap & Architecture
 
-A fast, offline-first desktop browser for the Arch User Repository (AUR), built with [Slint](https://slint.dev) and Rust.
+A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR), built with [Slint](https://slint.dev) and Rust.
 
 ---
 

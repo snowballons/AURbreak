@@ -2,7 +2,7 @@
 name = "aurbreak"
 version = "0.1.2"
 edition = "2024"
-description = "A fast, offline-first desktop browser for the Arch User Repository (AUR)"
+description = "A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR)"
 authors = ["AURbreak Developers"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/snowballons/AURbreak"
@@ -17,7 +17,7 @@ maintainer = "AURbreak Developers"
 copyright = "2026 AURbreak"
 license-file = ["LICENSE", "4"]
 extended-description = """\
-AURbreak is a fast, offline-first desktop browser for the Arch User Repository (AUR), \
+AURbreak is a very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR), \
 built with Slint and Rust."""
 depends = "$auto, libfontconfig1, libxkbcommon0, libxkbcommon-x11-0"
 section = "utils"

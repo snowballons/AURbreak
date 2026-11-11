@@ -179,7 +179,7 @@ jobs:
           pkgname = aurbreak
           pkgbase = aurbreak
           pkgver = ${VERSION}-1
-          pkgdesc = A fast, offline-first desktop browser for the Arch User Repository (AUR)
+          pkgdesc = A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR)
           url = https://github.com/snowballons/AURbreak
           builddate = $(date +%s)
           packager = AURbreak CI <https://github.com/snowballons/AURbreak>
@@ -490,7 +490,7 @@ jobs:
           _pkgname=aurbreak
           pkgver=${PLAIN_VERSION}
           pkgrel=1
-          pkgdesc="A fast, offline-first desktop browser for the Arch User Repository (AUR)"
+          pkgdesc="A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR)"
           arch=('x86_64')
           url="${REPO_URL}"
           license=('GPL-3.0-or-later')

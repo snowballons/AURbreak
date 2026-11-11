@@ -2,7 +2,7 @@
 Type=Application
 Name=AURbreak
 GenericName=Arch User Repository Browser
-Comment=A fast, offline-first desktop browser for the Arch User Repository (AUR)
+Comment=A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR)
 Exec=aurbreak %u
 Icon=aurbreak
 Terminal=false
