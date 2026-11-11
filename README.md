@@ -33,25 +33,25 @@ It connects directly to the official AUR RPC v5 endpoints and RSS feeds, pairs h
 
 ## Key Features
 
-- **⚡ Live Feed Discovery**:
+- ** Live Feed Discovery**:
   - **Last Modified**: Browse the freshest updates via the official AUR RSS feed.
   - **Newest Submissions**: Discover newly registered AUR packages.
-- **🔍 Full AUR RPC v5 Search**:
+- ** Full AUR RPC v5 Search**:
   - Filter by **Name**, **Name & Description**, **Maintainer**, **Submitter**, or **Dependencies** (`depends`, `makedepends`, `optdepends`, `checkdepends`).
   - Fast instant client-side sub-filtering on loaded results.
   - Paginated browsing with customizable page sizes (25, 50, 100, 250).
-- **📋 Deep Package Inspector**:
+- ** Deep Package Inspector**:
   - Full package details: Votes, Popularity score, Maintainer, Submitter, First Submitted, and Last Modified timestamps.
   - Upstream URL with direct browser launcher.
   - Granular dependency tree tags: Runtime Depends, Make Depends, and Optional Depends.
   - Flagged out-of-date alert banner.
   - Direct `AUR ↗` button opening the official package page.
-- **💻 Quick Terminal Helper Integration**:
+- ** Quick Terminal Helper Integration**:
   - One-click copyable terminal command for your preferred AUR helper (`yay -S <pkg>`, `paru -S <pkg>`, or `pikaur -S <pkg>`).
 - **💾 Offline-First Architecture**:
   - Instant startup with persistent local caching under XDG data directory (`~/.local/share/aurbreak/cache.json`).
   - Automatic cache backup (`cache.json.bak`) with corruption self-healing.
-- **⚙️ Configurable Preferences**:
+- ** Configurable Preferences**:
   - Customize preferred AUR helper, default search criteria, search result limits, and offline cache management.
 - **🎨 Adaptive Theme**:
   - Native light and dark theme switching designed for Linux desktops.
