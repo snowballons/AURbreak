@@ -255,14 +255,36 @@ pub struct RssPackage {
 #[derive(Debug)]
 pub enum FetchError {
     Network(String),
+    /// HTTP error response (non-2xx status code).
+    Http { status: u16, message: String },
 }
 
 impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FetchError::Network(s) => write!(f, "Network error: {s}"),
+            FetchError::Http { status, message } => {
+                write!(f, "HTTP {status}: {message}")
+            }
         }
     }
+}
+
+/// Check response status and return a human-readable `FetchError::Http` for
+/// non-2xx responses (429 rate-limit, 404 not-found, 5xx server errors).
+fn check_status(resp: reqwest::blocking::Response) -> Result<reqwest::blocking::Response, FetchError> {
+    let status = resp.status();
+    if status.is_success() {
+        return Ok(resp);
+    }
+    let code = status.as_u16();
+    let message = match code {
+        429 => "Too many requests — AUR rate limit hit. Please wait a moment and try again.".to_string(),
+        404 => "Not found — the requested resource does not exist on AUR.".to_string(),
+        500..=599 => format!("AUR server error ({}). Try again later.", code),
+        _ => format!("Unexpected HTTP status {}.", code),
+    };
+    Err(FetchError::Http { status: code, message })
 }
 
 pub fn fetch_last_updated() -> Result<Vec<AurPackage>, FetchError> {
@@ -276,6 +298,7 @@ pub fn fetch_last_updated() -> Result<Vec<AurPackage>, FetchError> {
         .get("https://aur.archlinux.org/rss/modified")
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let xml = resp
         .text()
@@ -305,7 +328,7 @@ fn parse_rfc2822_date(s: &str) -> Option<DateTime<Utc>> {
 
 pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent("browse-arch/0.1.0 (aur browser)")
+        .user_agent("aurbreak/0.1.0 (aur browser)")
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))?;
@@ -314,6 +337,7 @@ pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
         .get("https://aur.archlinux.org/rss/")
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let xml = resp
         .text()
@@ -324,7 +348,7 @@ pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
 /// Build a reqwest client with standard config.
 fn aur_client() -> Result<reqwest::blocking::Client, FetchError> {
     reqwest::blocking::Client::builder()
-        .user_agent("browse-arch/0.1.0 (aur browser)")
+        .user_agent("aurbreak/0.1.0 (aur browser)")
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))
@@ -343,6 +367,7 @@ pub fn search_packages(arg: &str, by: Option<SearchBy>) -> Result<SearchResult, 
         .query(&[("arg", arg), ("by", by_str)])
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let json = resp
         .text()
@@ -359,6 +384,7 @@ pub fn get_package_info(name: &str) -> Result<PackageDetailed, FetchError> {
         .get(format!("https://aur.archlinux.org/rpc/v5/info/{}", name))
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let json = resp
         .text()
@@ -392,6 +418,7 @@ pub fn get_multi_info(names: &[&str]) -> Result<Vec<PackageDetailed>, FetchError
         .query(&query)
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let json = resp
         .text()
@@ -413,6 +440,7 @@ pub fn suggest_packages(prefix: &str) -> Result<Vec<String>, FetchError> {
         ))
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let json = resp
         .text()
@@ -432,6 +460,7 @@ pub fn suggest_pkgbases(prefix: &str) -> Result<Vec<String>, FetchError> {
         ))
         .send()
         .map_err(|e| FetchError::Network(e.to_string()))?;
+    let resp = check_status(resp)?;
 
     let json = resp
         .text()
