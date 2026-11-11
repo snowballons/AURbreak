@@ -25,32 +25,9 @@
 
 It connects directly to the official AUR RPC v5 endpoints and RSS feeds, pairs high performance with low memory usage, caches data locally for instant offline review, and provides one-click installation commands for your favorite AUR helper (`yay`, `paru`, `pikaur`).
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ AURbreak (Slint UI)                                                    │
-│                                                                        │
-│  [Logo] AURbreak      [ ⚡ Last Modified | ✨ Newest | 🔍 Search AUR ]  [⚙] [↻] │
-├────────────────────────────────────────────────────────────────────────┤
-│  [ 🔍 Filter packages by name, description, maintainer... ] [100 pkgs] │
-├──────────────────────────────────────┬─────────────────────────────────┤
-│  PACKAGE LIST                        │  INSPECTOR PANE (Width: 420px)  │
-│  ──────────────────────────────────  │  ─────────────────────────────  │
-│  ┌────────────────────────────────┐  │  pkg-name v1.2.3    [AUR ↗] [✕] │
-│  │ visual-studio-code-bin v1.96-1 │  │  ─────────────────────────────  │
-│  │ Description text...            │  │  >_ yay -S pkg-name             │
-│  │ ▲ 2450 votes  ★ 42.15 pop      │  │  ─────────────────────────────  │
-│  └────────────────────────────────┘  │  ABOUT                          │
-│  ┌────────────────────────────────┐  │  Upstream URL: https://...      │
-│  │ yay v12.4.2-1                  │  │  License: GPL-3.0-or-later      │
-│  │ Pacman wrapper and AUR helper  │  │  ─────────────────────────────  │
-│  │ ▲ 4120 votes  ★ 68.30 pop      │  │  ▲ 2450 votes  ★ 42.15 pop      │
-│  └────────────────────────────────┘  │  Maintainer: maintainer_name    │
-│                                      │  Dependencies (3):              │
-│                                      │  [ • zlib ] [ • glibc ]         │
-├──────────────────────────────────────┴─────────────────────────────────┤
-│ Ready • 100 packages loaded               Esc: Close details • Enter: Search │
-└────────────────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="ui/assets/screenshot.png" alt="AURbreak UI Screenshot" />
+</p>
 
 ---
 
