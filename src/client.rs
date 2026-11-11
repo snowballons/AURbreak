@@ -256,7 +256,10 @@ pub struct RssPackage {
 pub enum FetchError {
     Network(String),
     /// HTTP error response (non-2xx status code).
-    Http { status: u16, message: String },
+    Http {
+        status: u16,
+        message: String,
+    },
 }
 
 impl std::fmt::Display for FetchError {
@@ -272,24 +275,30 @@ impl std::fmt::Display for FetchError {
 
 /// Check response status and return a human-readable `FetchError::Http` for
 /// non-2xx responses (429 rate-limit, 404 not-found, 5xx server errors).
-fn check_status(resp: reqwest::blocking::Response) -> Result<reqwest::blocking::Response, FetchError> {
+fn check_status(
+    resp: reqwest::blocking::Response,
+) -> Result<reqwest::blocking::Response, FetchError> {
     let status = resp.status();
     if status.is_success() {
         return Ok(resp);
     }
     let code = status.as_u16();
     let message = match code {
-        429 => "Too many requests — AUR rate limit hit. Please wait a moment and try again.".to_string(),
+        429 => "Too many requests — AUR rate limit hit. Please wait a moment and try again."
+            .to_string(),
         404 => "Not found — the requested resource does not exist on AUR.".to_string(),
         500..=599 => format!("AUR server error ({}). Try again later.", code),
         _ => format!("Unexpected HTTP status {}.", code),
     };
-    Err(FetchError::Http { status: code, message })
+    Err(FetchError::Http {
+        status: code,
+        message,
+    })
 }
 
 pub fn fetch_last_updated() -> Result<Vec<AurPackage>, FetchError> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent("aurbreak/0.1.0 (aur browser)")
+        .user_agent(concat!("aurbreak/", env!("CARGO_PKG_VERSION"), " (aur browser)"))
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))?;
@@ -328,7 +337,7 @@ fn parse_rfc2822_date(s: &str) -> Option<DateTime<Utc>> {
 
 pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent("aurbreak/0.1.0 (aur browser)")
+        .user_agent(concat!("aurbreak/", env!("CARGO_PKG_VERSION"), " (aur browser)"))
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))?;
@@ -348,7 +357,7 @@ pub fn fetch_rss_newest() -> Result<Vec<RssPackage>, FetchError> {
 /// Build a reqwest client with standard config.
 fn aur_client() -> Result<reqwest::blocking::Client, FetchError> {
     reqwest::blocking::Client::builder()
-        .user_agent("aurbreak/0.1.0 (aur browser)")
+        .user_agent(concat!("aurbreak/", env!("CARGO_PKG_VERSION"), " (aur browser)"))
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| FetchError::Network(e.to_string()))

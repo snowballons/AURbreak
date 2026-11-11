@@ -1,7 +1,7 @@
 # Maintainer: AURbreak Developers <https://github.com/snowballons/AURbreak>
 pkgname=aurbreak-bin
 _pkgname=aurbreak
-pkgver=0.1.0
+pkgver=0.1.4
 pkgrel=1
 pkgdesc="A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR)"
 arch=('x86_64')

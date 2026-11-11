@@ -346,6 +346,10 @@ fn main() {
             .map(|s| s.into())
             .collect();
         state.set_search_history(slint::ModelRc::new(slint::VecModel::from(hist)));
+
+        // Inject the build-time version string so the About panel in Settings
+        // always reflects the actual binary version rather than a hardcoded default.
+        state.set_app_version(env!("CARGO_PKG_VERSION").into());
     }
 
     // Offline-first: paint from the local cache immediately, then refresh in
@@ -630,18 +634,17 @@ fn main() {
     // all results in a single response.
     let ui_weak = ui.as_weak();
     let current_pkgs_page = current_pkgs.clone();
-    ui.global::<AppLogic>()
-        .on_search_page_changed(move |page| {
-            if let Some(app) = ui_weak.upgrade() {
-                let state = app.global::<AppState>();
-                if state.get_search_query().is_empty() {
-                    return;
-                }
-                state.set_search_page(page);
-                let pkgs = current_pkgs_page.borrow();
-                apply_search_page(&app, &pkgs);
+    ui.global::<AppLogic>().on_search_page_changed(move |page| {
+        if let Some(app) = ui_weak.upgrade() {
+            let state = app.global::<AppState>();
+            if state.get_search_query().is_empty() {
+                return;
             }
-        });
+            state.set_search_page(page);
+            let pkgs = current_pkgs_page.borrow();
+            apply_search_page(&app, &pkgs);
+        }
+    });
 
     // Search by changed callback
     let ui_weak = ui.as_weak();
@@ -854,21 +857,19 @@ fn main() {
                                             description: p.description.unwrap_or_default(),
                                             maintainer: p.maintainer.unwrap_or_default(),
                                             updated_str: {
-                                                let dt =
-                                                    chrono::DateTime::from_timestamp(
-                                                        p.last_modified,
-                                                        0,
-                                                    );
+                                                let dt = chrono::DateTime::from_timestamp(
+                                                    p.last_modified,
+                                                    0,
+                                                );
                                                 dt.map(|d| {
                                                     d.format("%Y-%m-%d %H:%M (UTC)").to_string()
                                                 })
                                                 .unwrap_or_default()
                                             },
-                                            updated_utc:
-                                                chrono::DateTime::from_timestamp(
-                                                    p.last_modified,
-                                                    0,
-                                                ),
+                                            updated_utc: chrono::DateTime::from_timestamp(
+                                                p.last_modified,
+                                                0,
+                                            ),
                                         })
                                         .collect();
 
@@ -881,9 +882,8 @@ fn main() {
                                     let page_size = state.get_search_page_size().max(1);
                                     let actual_count = aur_pkgs.len() as i32;
                                     state.set_search_total_pages(
-                                        ((actual_count as f64) / (page_size as f64))
-                                            .ceil()
-                                            .max(1.0) as i32,
+                                        ((actual_count as f64) / (page_size as f64)).ceil().max(1.0)
+                                            as i32,
                                     );
                                     // Show only the first page of results.
                                     apply_search_page(&app, &aur_pkgs);
@@ -990,31 +990,21 @@ fn main() {
                                     ));
                                     state.set_detail_submitter(detail.submitter.into());
                                     state.set_detail_first_submitted(
-                                        chrono::DateTime::from_timestamp(
-                                            detail.first_submitted,
-                                            0,
-                                        )
-                                        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
-                                        .unwrap_or_default()
-                                        .into(),
+                                        chrono::DateTime::from_timestamp(detail.first_submitted, 0)
+                                            .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                                            .unwrap_or_default()
+                                            .into(),
                                     );
                                     state.set_detail_last_modified(
-                                        chrono::DateTime::from_timestamp(
-                                            detail.last_modified,
-                                            0,
-                                        )
-                                        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
-                                        .unwrap_or_default()
-                                        .into(),
+                                        chrono::DateTime::from_timestamp(detail.last_modified, 0)
+                                            .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                                            .unwrap_or_default()
+                                            .into(),
                                     );
                                     state.set_detail_out_of_date(
                                         detail
                                             .out_of_date
-                                            .and_then(|ts| {
-                                                chrono::DateTime::from_timestamp(
-                                                    ts, 0,
-                                                )
-                                            })
+                                            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
                                             .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
                                             .unwrap_or_default()
                                             .into(),

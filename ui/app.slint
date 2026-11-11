@@ -108,7 +108,7 @@ export global AppState {
     in-out property <string> cache-path: "";
     in-out property <string> cache-size-str: "";
     in-out property <string> api-endpoint: "https://aur.archlinux.org/rpc/v5";
-    in-out property <string> app-version: "0.1.0";
+    in-out property <string> app-version: "";
 }
 
 // Global logic callbacks handled by Rust
@@ -2168,7 +2168,7 @@ component SettingsView inherits Rectangle {
                 // 6. About AURbreak
                 SettingsSectionCard {
                     title: "ℹ️ About AURbreak";
-                    subtitle: "Desktop browser for Arch Linux User Repository (AUR)";
+                    subtitle: "A very fast lightweight offline-first app for browsing, searching, and inspecting AUR packages";
 
                     HorizontalLayout {
                         spacing: 16px;

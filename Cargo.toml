@@ -1,6 +1,6 @@
 [package]
 name = "aurbreak"
-version = "0.1.2"
+version = "0.1.4"
 edition = "2024"
 description = "A very fast lightweight offline-first app for for browsing, searching, and inspecting packages from the Arch User Repository (AUR)"
 authors = ["AURbreak Developers"]
