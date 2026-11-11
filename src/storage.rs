@@ -179,6 +179,72 @@ impl Default for AppConfig {
     }
 }
 
+// ─── Search History ──────────────────────────────────────────────────────────
+
+/// Maximum number of recent searches to persist.
+const HISTORY_LIMIT: usize = 10;
+
+/// Resolve the history file path (same dir as cache/config).
+pub fn history_file() -> PathBuf {
+    if let Ok(dir) =
+        std::env::var("AURBREAK_TEST_DIR").or_else(|_| std::env::var("BROWSE_ARCH_TEST_DIR"))
+    {
+        let p = PathBuf::from(dir);
+        ensure_parent(&p);
+        return p.join("history.json");
+    }
+    project_dir().join("history.json")
+}
+
+/// Load saved search history. Returns an empty vec if the file is missing or corrupt.
+pub fn load_history() -> Vec<String> {
+    let path = history_file();
+    if !path.exists() {
+        return Vec::new();
+    }
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice::<Vec<String>>(&bytes).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Prepend `query` to history (deduplicating), cap at `HISTORY_LIMIT`, persist atomically.
+pub fn push_history(query: &str) {
+    let query = query.trim();
+    if query.is_empty() {
+        return;
+    }
+    let mut history = load_history();
+    // Remove any existing occurrence of the same query so it bubbles to the top.
+    history.retain(|q| q != query);
+    history.insert(0, query.to_string());
+    history.truncate(HISTORY_LIMIT);
+    save_history(&history);
+}
+
+/// Persist history atomically.
+pub fn save_history(history: &[String]) {
+    let path = history_file();
+    ensure_parent(&path);
+    let bytes = match serde_json::to_vec(history) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+    let tmp = path.with_extension("json.tmp");
+    if std::fs::write(&tmp, &bytes).is_err() {
+        return;
+    }
+    let _ = std::fs::rename(&tmp, &path);
+}
+
+/// Clear all saved search history.
+pub fn clear_history() {
+    let path = history_file();
+    if path.exists() {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
 /// Resolve the config file path.
 pub fn config_file() -> PathBuf {
     if let Ok(dir) =
@@ -386,6 +452,75 @@ mod tests {
 
             let (_, empty_status) = cache_stats();
             assert!(empty_status.contains("No cached data"));
+        });
+    }
+
+    #[test]
+    fn test_history_push_and_load() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            assert!(load_history().is_empty());
+
+            push_history("yay");
+            push_history("spotify");
+            push_history("telegram");
+
+            let h = load_history();
+            assert_eq!(h.len(), 3);
+            assert_eq!(h[0], "telegram");
+            assert_eq!(h[1], "spotify");
+            assert_eq!(h[2], "yay");
+        });
+    }
+
+    #[test]
+    fn test_history_deduplication() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            push_history("yay");
+            push_history("spotify");
+            push_history("yay"); // duplicate — should bubble to top
+
+            let h = load_history();
+            assert_eq!(h.len(), 2);
+            assert_eq!(h[0], "yay");
+            assert_eq!(h[1], "spotify");
+        });
+    }
+
+    #[test]
+    fn test_history_limit() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            for i in 0..15 {
+                push_history(&format!("query-{i}"));
+            }
+            let h = load_history();
+            assert_eq!(h.len(), 10, "history must be capped at 10");
+            assert_eq!(h[0], "query-14");
+        });
+    }
+
+    #[test]
+    fn test_history_clear() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            push_history("yay");
+            push_history("paru");
+            assert_eq!(load_history().len(), 2);
+
+            clear_history();
+            assert!(load_history().is_empty());
+        });
+    }
+
+    #[test]
+    fn test_history_ignores_blank() {
+        let dir = tmp_dir();
+        with_test_dir(&dir, || {
+            push_history("  ");
+            push_history("");
+            assert!(load_history().is_empty());
         });
     }
 }
