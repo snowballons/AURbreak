@@ -59,6 +59,8 @@ export global AppState {
     in-out property <string> search-filter: "";
     in-out property <int> total-items-count: 0;
     in-out property <int> displayed-items-count: 0;
+    // Drives a fade-in when the active tab changes (0.0 → 1.0).
+    in-out property <float> tab-opacity: 1.0;
 
     // Search tab state
     in-out property <string> search-query: "";
@@ -70,6 +72,7 @@ export global AppState {
     in-out property <[string]> suggestions: [];
     in-out property <string> search-error: "";          // non-empty when last search failed
     in-out property <[string]> search-history: [];       // up to 10 recent queries
+    in-out property <int> spinner-frame: 0;              // 0-7 cycles for loading spinner
 
     // Detail view state
     in-out property <bool> show-detail: false;
@@ -198,8 +201,14 @@ component PackageCard inherits Rectangle {
         ? Theme.border-selected
         : (touch.has-hover ? Theme.border-hover : Theme.border-default);
 
+    // Subtle lift on hover: drop-shadow simulation via border brightening
+    // and a slight opacity bump — Slint layouts own x/y/width so we
+    // drive the scale feel through border and opacity animation instead.
+    opacity: touch.has-hover ? 1.0 : 0.97;
+
     animate background { duration: 150ms; }
     animate border-color { duration: 150ms; }
+    animate opacity { duration: 120ms; easing: ease-out; }
 
     touch := TouchArea {
         mouse-cursor: pointer;
@@ -372,6 +381,7 @@ component SearchBar inherits Rectangle {
     in-out property <[string]> suggestions: [];
     in-out property <string> search-error: "";
     in-out property <[string]> search-history: [];
+    in-out property <int> spinner-frame: 0;  // drives animated spinner glyph
     // Which suggestion row is highlighted (-1 = none)
     in-out property <int> suggestion-index: -1;
 
@@ -451,6 +461,11 @@ component SearchBar inherits Rectangle {
                         }
                         return accept;
                     }
+                    // Backspace on empty input → fill with most recent history entry
+                    if (ev.text == Key.Backspace && root.query == "" && root.search-history.length > 0) {
+                        root.query = root.search-history[0];
+                        return accept;
+                    }
                     return reject;
                 }
             }
@@ -464,13 +479,58 @@ component SearchBar inherits Rectangle {
                 }
             }
 
-            Button {
-                text: root.loading ? "Searching…" : "Search";
-                enabled: !root.loading && root.query != "";
-                primary: true;
-                clicked => {
-                    root.suggestion-index = -1;
-                    root.search-requested(root.query, root.by, 1);
+            // Search / spinner button
+            Rectangle {
+                height: 34px;
+                border-radius: 6px;
+                background: (!root.loading && root.query != "")
+                    ? (search-btn-touch.has-hover ? #0369a1 : #0284c7)
+                    : Theme.pill-bg;
+                border-width: 1px;
+                border-color: (!root.loading && root.query != "")
+                    ? #0284c7
+                    : Theme.border-subtle;
+                animate background { duration: 150ms; }
+
+                search-btn-touch := TouchArea {
+                    mouse-cursor: (!root.loading && root.query != "") ? pointer : default;
+                    enabled: !root.loading && root.query != "";
+                    clicked => {
+                        root.suggestion-index = -1;
+                        root.search-requested(root.query, root.by, 1);
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 6px;
+                    alignment: center;
+
+                    Text {
+                        // Spinner frames: ⠋⠙⠹⠸⠼⠴⠦⠧
+                        text: root.loading
+                            ? (root.spinner-frame == 0 ? "⠋"
+                            : root.spinner-frame == 1 ? "⠙"
+                            : root.spinner-frame == 2 ? "⠹"
+                            : root.spinner-frame == 3 ? "⠸"
+                            : root.spinner-frame == 4 ? "⠼"
+                            : root.spinner-frame == 5 ? "⠴"
+                            : root.spinner-frame == 6 ? "⠦"
+                            : "⠧")
+                            : "🔍";
+                        font-size: 13px;
+                        color: (!root.loading && root.query != "") ? #ffffff : Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: root.loading ? "Searching…" : "Search";
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: (!root.loading && root.query != "") ? #ffffff : Theme.text-muted;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }
@@ -2445,6 +2505,8 @@ export component AppWindow inherits Window {
             if !AppState.show-settings: VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 12px;
+                opacity: AppState.tab-opacity;
+                animate opacity { duration: 180ms; easing: ease-in; }
 
                 // Search Bar (Tab 2) OR Filter Bar (Tab 0 & 1)
                 if AppState.active-tab == 2: SearchBar {
@@ -2458,6 +2520,7 @@ export component AppWindow inherits Window {
                 suggestions <=> AppState.suggestions;
                 search-error <=> AppState.search-error;
                 search-history <=> AppState.search-history;
+                spinner-frame <=> AppState.spinner-frame;
 
                 search-requested(query, by, page) => { AppLogic.search-requested(query, by, page); }
                 page-changed(page) => { AppLogic.search-page-changed(page); }

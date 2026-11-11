@@ -428,6 +428,10 @@ fn main() {
             state.set_show_settings(false);
             state.set_active_tab(new_tab);
             state.set_search_filter("".into());
+            // Trigger fade-in: drop opacity to 0 then immediately restore to 1
+            // so the animate declaration plays the transition.
+            state.set_tab_opacity(0.0);
+            state.set_tab_opacity(1.0);
             if new_tab == 0 {
                 // Guard: skip if a fetch is already in flight to avoid stacking threads.
                 if !state.get_loading() {
@@ -765,6 +769,13 @@ fn main() {
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(100),
         move || {
+            // Advance spinner frame while any loading is active.
+            if let Some(app) = ui_weak.upgrade() {
+                let state = app.global::<AppState>();
+                if state.get_search_loading() || state.get_loading() {
+                    state.set_spinner_frame((state.get_spinner_frame() + 1) % 8);
+                }
+            }
             while let Ok(msg) = rx.try_recv() {
                 if let Some(app) = ui_weak.upgrade() {
                     let state = app.global::<AppState>();
@@ -844,7 +855,7 @@ fn main() {
                                             maintainer: p.maintainer.unwrap_or_default(),
                                             updated_str: {
                                                 let dt =
-                                                    chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                                    chrono::DateTime::from_timestamp(
                                                         p.last_modified,
                                                         0,
                                                     );
@@ -854,7 +865,7 @@ fn main() {
                                                 .unwrap_or_default()
                                             },
                                             updated_utc:
-                                                chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                                chrono::DateTime::from_timestamp(
                                                     p.last_modified,
                                                     0,
                                                 ),
@@ -979,7 +990,7 @@ fn main() {
                                     ));
                                     state.set_detail_submitter(detail.submitter.into());
                                     state.set_detail_first_submitted(
-                                        chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                        chrono::DateTime::from_timestamp(
                                             detail.first_submitted,
                                             0,
                                         )
@@ -988,7 +999,7 @@ fn main() {
                                         .into(),
                                     );
                                     state.set_detail_last_modified(
-                                        chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                        chrono::DateTime::from_timestamp(
                                             detail.last_modified,
                                             0,
                                         )
@@ -1000,7 +1011,7 @@ fn main() {
                                         detail
                                             .out_of_date
                                             .and_then(|ts| {
-                                                chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                                chrono::DateTime::from_timestamp(
                                                     ts, 0,
                                                 )
                                             })
